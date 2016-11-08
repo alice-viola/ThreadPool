@@ -16,21 +16,6 @@
 
 namespace astp {
 
-    /*
-    int f(int x, int y) { return std::pow(x,y); }
-
-    void task_thread()
-    {
-        std::packaged_task<int(int,int)> task(f);
-        std::future<int> result = task.get_future();
-    
-        std::thread task_td(std::move(task), 2, 10);
-        task_td.join();
-    
-        std::cout << "task_thread:\t" << result.get() << '\n';
-    }
-    */
-
     template<class T, class K>
     class ThreadPool
     {
@@ -140,7 +125,7 @@ namespace astp {
         std::condition_variable _cv;
         std::mutex _mutex;
 
-        template<class N> void 
+        template<class N> inline void 
         _secure_queue_push(N n) {
             _sem_wait();
             _queue.push(n);
@@ -172,14 +157,14 @@ namespace astp {
             }
         }
 
-        void
+        inline void
         _sem_wait() {
             std::unique_lock<std::mutex> lock(this->_mutex);
             while(!_sem_count) _cv.wait(lock);
             _sem_count--;
         }
 
-        void 
+        inline void 
         _sem_signal() {
             std::unique_lock<std::mutex> lock(this->_mutex);
             _sem_count++;
