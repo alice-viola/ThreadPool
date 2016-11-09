@@ -48,21 +48,55 @@ private:
     static const int offset = 10000;
 };
 
-int 
-main() {
+void 
+test_thread_pool(int imax = 100000) {
     using namespace astp;
+    std::cout << "\nSTART POOL" << std::endl;
     auto time = start_time(); 
-    auto tp = ThreadPool<int, int>();
-    std::cout <<"Init pool size: " << tp.pool_size() << std::endl;
-    std::cout <<"Init queue size: " << tp.queue_size() << std::endl;
-    for (int i = 0; i < 1000; i++) {
+    auto tp = ThreadPool<int, int>();        
+    for (int i = 0; i < imax; i++) {
         auto job = JobTest();
         tp.push(std::bind(&JobTest::do_heavy_calc, job, std::placeholders::_1), i);
     }
-    tp.stop(true);
-    std::cout << "TIME : " << time_since(time) << std::endl;
-    return 0;
+    tp.wait();
+    std::cout << "TIME POOL: " << time_since(time) << std::endl;
 }
 
+void
+test_spawn_threads(int imax = 100000) {
+    std::cout << "\nSTART SPAWN" << std::endl;
+    auto time = start_time(); 
+    std::vector< std::future< int > > threads;
+    for (int i = 0; i < imax; i++) {
+        auto job = JobTest();
+        threads.push_back(std::async(std::launch::async, &JobTest::do_heavy_calc, job, i));
+    }
+    for (auto &t : threads) {
+        t.get();
+    }
+    std::cout << "TIME SPAWN: " << time_since(time) << std::endl;
+}
 
+void 
+test_sync(int imax = 100000) {
+    std::cout << "\nSTART SYNC" << std::endl;
+    auto time = start_time(); 
+    for (int i = 0; i < imax; i++) {
+        auto job = JobTest();
+        job.do_heavy_calc(i);
+    }
+    std::cout << "TIME SYNC: " << time_since(time) << std::endl;
+}
+
+int 
+main() {
+    using namespace astp;
+    int imax = 100000;
+    for (int i = 0; i < 1; i++) {
+        test_thread_pool(imax);    
+    }
+    test_spawn_threads(imax);
+    test_sync(imax);
+    return 0;
+}
 
