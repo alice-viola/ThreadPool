@@ -25,9 +25,11 @@ namespace astp {
         *   If *max_threads* is not specified,
         *   the pool size is set to the max number
         *   of threads supported by the architecture.
+        *   The abs value of max_threads is taken.
+        *   At least one thread is created.
         */
         ThreadPool(int max_threads = std::thread::hardware_concurrency()) : 
-            _max_threads(abs(max_threads)), 
+            _max_threads(max_threads < 1 ? 1 : max_threads), 
             _queue_size(0),
             _thread_sleep_time_ns(100000000),
             _run_pool_thread(true)
@@ -40,6 +42,10 @@ namespace astp {
         */ 
         ThreadPool(const ThreadPool &TP) {};
     
+        /**
+        *   When the ThreadPool is deallocated,
+        *   the threads still running are joined().
+        */
         ~ThreadPool() {
             if (_run_pool_thread) {
                 _run_pool_thread = false;
@@ -47,9 +53,9 @@ namespace astp {
             }
         };
 
-
         /**
-        *   Update size for the thread pool.
+        *   Update size for the thread pool;
+        *   the abs value of num_threads is taken.
         */
         ThreadPool&
         resize(int num_threads = std::thread::hardware_concurrency()) {
@@ -72,7 +78,6 @@ namespace astp {
             return resize(_queue_size);
         }
 
-
         /**
         *   Returning the current size of the 
         *   thread pool.
@@ -91,7 +96,6 @@ namespace astp {
         queue_is_empty() {
             return _queue_size == 0;
         }
-
 
         /**
         *   Stop execution, detach all
@@ -119,7 +123,6 @@ namespace astp {
             return;
         }
 
-
         /**
         *   Set the thread sleep time.
         *   Interval is in nanoseconds.
@@ -135,7 +138,6 @@ namespace astp {
             return _thread_sleep_time_ns;
         }
 
-
         /**
         *   Push a job to do in jobs queue.
         *   Use lamda expressions in order to
@@ -147,10 +149,24 @@ namespace astp {
         }
     
     private:
+        /** 
+        *   Mutex for queue access. 
+        */
         std::mutex _mutex;
-        std::atomic<int> _max_threads;
+
+        /** 
+        *   Time in nanoseconds which threads
+        *   that are sleeping check for new
+        *   jobs in the queue.
+        */
         std::atomic<int> _thread_sleep_time_ns;
+        
+        /**
+        *   Flag for pool's threads state.
+        */
         std::atomic<bool> _run_pool_thread;
+
+        std::atomic<int> _max_threads;
         std::atomic<size_t> _queue_size;
         std::vector<std::thread> _pool;
         std::queue<std::function<void()> > _queue;
@@ -158,14 +174,14 @@ namespace astp {
 
         template<class F> inline void
         _safe_queue_push(const F t) {
-            std::unique_lock<std::mutex> lock(this->_mutex);
-            _queue_size++;
+            std::unique_lock<std::mutex> lock(_mutex);
             _queue.push(t);
+            _queue_size++;
         }
 
         inline std::pair<bool, std::function<void()> >
         _safe_queue_pop() {
-            std::unique_lock<std::mutex> lock(this->_mutex);
+            std::unique_lock<std::mutex> lock(_mutex);
             if (_queue.empty()) return std::make_pair(false, std::function<void()>()); 
             auto t = _queue.front();
             _queue.pop();
@@ -194,6 +210,14 @@ namespace astp {
             _max_threads--;
         }
 
+        /**
+        *   Each thread start run this function
+        *   when the thread is created, and 
+        *   exit only when the pool is destructed
+        *   or the stop() function is called.
+        *   The thread go to sleep if the 
+        *   queue is empty. 
+        */
         void 
         _thread_loop_mth() noexcept {
             while(_run_pool_thread) {
@@ -204,6 +228,7 @@ namespace astp {
                     continue; 
                 }
                 try {
+                    std::cout << std::this_thread::get_id() << std::endl;
                     funcf.second();  
                 } catch (...) {
                     // TODO

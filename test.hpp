@@ -29,16 +29,16 @@ public:
     exc_all() {
         create(random(-100, 1000));
         resize(random(-100, 1000));
-        push(random(0, 1000));
+        push(random(0, 100000));
         set_sleep_time(random(-100, 1000000000));
-        do_job(random(0, 1000));
+        do_job(random(0, 100000));
     }
 
     void
     create(int n) {
         auto start = start_func(__func__, n);
         auto tp = ThreadPool(n);
-        assert(tp.pool_size() == abs(n));
+        assert(tp.pool_size() == abs(n) || tp.pool_size() == 1);
         end_func(start);
     } 
 
@@ -77,7 +77,13 @@ public:
         auto start = start_func(__func__, jobs_num);
         auto tp = ThreadPool();
         for (int i = 0; i < jobs_num; i++) {
-            tp.push([] () {  });    
+            tp.push([&] () { 
+                int max = random(1, 100000);
+                std::vector<int> vec;
+                for (int i = 0; i < max; i++) {
+                    vec.push_back(random(1, 1000));
+                }
+             });    
         }
         tp.wait();
         assert(tp.queue_size() == 0);

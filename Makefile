@@ -1,6 +1,6 @@
 CC=g++ -std=c++14
 OPT=-O3
-DEPS=threadpool.hpp test.hpp
+DEPS=threadpool.hpp test.hpp example.hpp
 OBJ=main.o 
 
 %.o: %.cpp $(DEPS)
