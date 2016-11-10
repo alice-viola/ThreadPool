@@ -25,16 +25,15 @@ namespace astp {
         *   If *max_threads* is not specified,
         *   the pool size is set to the max number
         *   of threads supported by the architecture.
-        *   The abs value of max_threads is taken.
         *   At least one thread is created.
         */
         ThreadPool(int max_threads = std::thread::hardware_concurrency()) : 
-            _max_threads(max_threads < 1 ? 1 : max_threads), 
+            _max_threads(0), 
             _queue_size(0),
             _thread_sleep_time_ns(100000000),
             _run_pool_thread(true)
         {
-            _create_pool();
+            resize(max_threads < 1 ? 1 : max_threads);
         }; 
 
         /**
@@ -59,9 +58,11 @@ namespace astp {
         */
         ThreadPool&
         resize(int num_threads = std::thread::hardware_concurrency()) {
+            std::unique_lock<std::mutex> lock(_mutex_pool);
             if (num_threads < 1) { num_threads = 1; }
             int diff = abs(num_threads - (int)_max_threads);
             if (num_threads > _max_threads) {
+                //_pool.reserve(_pool.size() + diff); TOCHECK
                 for (int i = 0; i < diff; i++) _pool_push_thread();
             } else {
                 for (int i = 0; i < diff; i++) _pool_pop_thread();
@@ -152,7 +153,12 @@ namespace astp {
         /** 
         *   Mutex for queue access. 
         */
-        std::mutex _mutex;
+        std::mutex _mutex_queue;
+
+        /** 
+        *   Mutex for pool resize. 
+        */
+        std::mutex _mutex_pool;
 
         /** 
         *   Time in nanoseconds which threads
@@ -162,7 +168,9 @@ namespace astp {
         std::atomic<int> _thread_sleep_time_ns;
         
         /**
-        *   Flag for pool's threads state.
+        *   Flag for pool's threads state,
+        *   when false, all the threads will be
+        *   detached.
         */
         std::atomic<bool> _run_pool_thread;
 
@@ -170,18 +178,30 @@ namespace astp {
         std::atomic<size_t> _queue_size;
         std::vector<std::thread> _pool;
         std::queue<std::function<void()> > _queue;
+        std::vector<std::thread::id> _thread_to_terminate;
         
-
+        /**
+        *   Lock the queue mutex for
+        *   a safe insertion in the queue.
+        */
         template<class F> inline void
         _safe_queue_push(const F t) {
-            std::unique_lock<std::mutex> lock(_mutex);
+            std::unique_lock<std::mutex> lock(_mutex_queue);
             _queue.push(t);
             _queue_size++;
         }
 
+        /**
+        *   Lock the queue mutex, safely pop
+        *   job from the queue if not empty;
+        *   returns a pair where the first value
+        *   is false if the queue is empty, the 
+        *   second value is the lamda expression
+        *   to execute.
+        */
         inline std::pair<bool, std::function<void()> >
         _safe_queue_pop() {
-            std::unique_lock<std::mutex> lock(_mutex);
+            std::unique_lock<std::mutex> lock(_mutex_queue);
             if (_queue.empty()) return std::make_pair(false, std::function<void()>()); 
             auto t = _queue.front();
             _queue.pop();
@@ -189,22 +209,26 @@ namespace astp {
             return std::make_pair(true, t);
         }
 
+        /**
+        *   Called when the ThreadPool is created 
+        *   or the user has required a resize 
+        *   operation.
+        */
         void 
-        _create_pool() {
-            _pool = std::vector<std::thread> (_max_threads);
-            for (int i = 0; i < _max_threads; i++) {
-                _pool[i] = std::thread(&ThreadPool::_thread_loop_mth, this);
-            }
-        }
-
-        void
         _pool_push_thread() {
             _pool.push_back(std::thread(&ThreadPool::_thread_loop_mth, this));
             _max_threads++;
         }
 
-        void
+
+        /**
+        *   Called when the ThreadPool is deleted 
+        *   or the user has required both a resize 
+        *   operation or a stop operation.
+        */
+        void 
         _pool_pop_thread() {
+            _thread_to_terminate.push_back(_pool.back().get_id());
             _pool.back().detach();
             _pool.pop_back();
             _max_threads--;
@@ -221,6 +245,13 @@ namespace astp {
         void 
         _thread_loop_mth() noexcept {
             while(_run_pool_thread) {
+                for (int i = 0; i < _thread_to_terminate.size(); i++) {
+                    if (std::this_thread::get_id() == _thread_to_terminate[i]) {
+                        // Exit and terminate thread
+                        _thread_to_terminate.erase(_thread_to_terminate.begin() + i);
+                        return;
+                    }
+                }
                 auto funcf = _safe_queue_pop();
                 if (!funcf.first) { 
                     // Sleep
@@ -228,7 +259,6 @@ namespace astp {
                     continue; 
                 }
                 try {
-                    std::cout << std::this_thread::get_id() << std::endl;
                     funcf.second();  
                 } catch (...) {
                     // TODO

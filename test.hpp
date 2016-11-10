@@ -27,11 +27,11 @@ public:
 
     void 
     exc_all() {
-        create(random(-100, 1000));
-        resize(random(-100, 1000));
-        push(random(0, 100000));
-        set_sleep_time(random(-100, 1000000000));
-        do_job(random(0, 100000));
+        create(ThreadPoolTest::random(-100, 1000));
+        resize(ThreadPoolTest::random(1, 10));
+        push(ThreadPoolTest::random(0, 100000));
+        set_sleep_time(ThreadPoolTest::random(-100, 1000000000));
+        do_job(ThreadPoolTest::random(0, 100000));
     }
 
     void
@@ -78,10 +78,10 @@ public:
         auto tp = ThreadPool();
         for (int i = 0; i < jobs_num; i++) {
             tp.push([&] () { 
-                int max = random(1, 100000);
+                int max = ThreadPoolTest::random(1, 100000);
                 std::vector<int> vec;
                 for (int i = 0; i < max; i++) {
-                    vec.push_back(random(1, 1000));
+                    vec.push_back(ThreadPoolTest::random(1, 1000));
                 }
              });    
         }
@@ -89,6 +89,13 @@ public:
         assert(tp.queue_size() == 0);
         end_func(start);
     }
+
+
+    static int
+    random(int min, int max) {
+        return rand() % max + min;
+    }
+
 
 private:
 
@@ -111,11 +118,6 @@ private:
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
         duration<double> time_span = duration_cast<duration<double>>(t2 - test.second);
         std::cout << "End test: " << test.first << " in " << time_span.count() << " seconds" << std::endl;
-    }
-
-    int
-    random(int min, int max) {
-        return rand() % max + min;
     }
 
 }; // End ThreadPoolTest
