@@ -1,14 +1,13 @@
 CC=g++ -std=c++14
-CXXFLAGS=-I.
 OPT=-O3
-DEPS=threadpool.hpp
+DEPS=threadpool.hpp test.hpp
 OBJ=main.o 
 
 %.o: %.cpp $(DEPS)
 	$(CC) $(OPT)  -c -o $@ $< $(CFLAGS)
 
 ThreadPool: $(OBJ)
-	$(CC) $(OPT)  -o $@ $^ $(CFLAGS) $(OPENCV)
+	$(CC) $(OPT)  -o $@ $^ $(CFLAGS)
 
 .PHONY: clean
 

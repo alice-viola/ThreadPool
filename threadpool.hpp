@@ -13,168 +13,165 @@
 #include <queue>
 #include <chrono>
 #include <assert.h>
-#include <iostream>
+
 
 namespace astp {
 
-    class Semaphore 
-    {
-    public:
-        Semaphore(int sem_count = 1) : sem_count_(sem_count) {};
-        Semaphore(const Semaphore &S) : mutex_(), cv_() {};
-        Semaphore& operator=(Semaphore S) {
-            return *this;
-        }
-        ~Semaphore() {};
 
-        void
-        wait() {
-            std::unique_lock<std::mutex> lock(this->mutex_);
-            cv_.wait(lock, [this](){ return sem_count_ != 0; });
-            sem_count_--;
-        }
-
-        void 
-        signal() {
-            std::unique_lock<std::mutex> lock(this->mutex_);
-            sem_count_++;
-            cv_.notify_one();
-        }
-
-    private:
-        std::condition_variable cv_;
-        std::mutex mutex_;
-        int sem_count_;
-    };
-
-
-    template<class T, class K>
     class ThreadPool
     {
     public:
         /**
         *   If *max_threads* is not specified,
         *   the pool size is set to the max number
-        *   of threads supported by the architecture
+        *   of threads supported by the architecture.
         */
-        ThreadPool(unsigned int max_threads = std::thread::hardware_concurrency()) : 
-            _max_threads(max_threads), 
+        ThreadPool(int max_threads = std::thread::hardware_concurrency()) : 
+            _max_threads(abs(max_threads)), 
+            _queue_size(0),
+            _thread_sleep_time_ns(100000000),
             _run_pool_thread(true)
         {
             _create_pool();
-            //_semaphore_m["queue"] = Semaphore(1);
         }; 
 
         /**
-        *   Copy constructor
+        *   Copy constructor.
         */ 
         ThreadPool(const ThreadPool &TP) {};
     
         ~ThreadPool() {
-            _run_pool_thread = false;
-            for (auto &t : _pool) t.join(); 
+            if (_run_pool_thread) {
+                _run_pool_thread = false;
+                for (auto &t : _pool) t.join();
+            }
         };
 
+
         /**
-        *   Update new size for the thread pool [TODO]
+        *   Update size for the thread pool.
         */
         ThreadPool&
-        resize(unsigned int max_threads = std::thread::hardware_concurrency()) {
-            assert("Function is not implemented yet");
+        resize(int num_threads = std::thread::hardware_concurrency()) {
+            if (num_threads < 1) { num_threads = 1; }
+            int diff = abs(num_threads - (int)_max_threads);
+            if (num_threads > _max_threads) {
+                for (int i = 0; i < diff; i++) _pool_push_thread();
+            } else {
+                for (int i = 0; i < diff; i++) _pool_pop_thread();
+            }
             return *this;
         }
 
         /**
+        *   Convenience method.
+        *   Adapt the pool size to the jobs queue size.
+        */
+        ThreadPool&
+        autofit() {
+            return resize(_queue_size);
+        }
+
+
+        /**
         *   Returning the current size of the 
-        *   thread pool
+        *   thread pool.
         */
         int 
         pool_size() { 
             return _max_threads; 
         }
 
-        int 
+        size_t
         queue_size() {
-            return _queue.size();
-        } 
+            return _queue_size;
+        }
 
         bool 
         queue_is_empty() {
-            return _queue.empty();
+            return _queue_size == 0;
         }
+
 
         /**
         *   Stop execution, detach all
-        *   jobs under processing
+        *   jobs under processing.
         */ 
         void
         stop() {
-            assert("Function is not implemented yet, use wait = true");
+            if (!_run_pool_thread) return;
+            _run_pool_thread = false;
+            while(_max_threads != 0) {
+                _pool_pop_thread();
+            }
         }
 
         /**
         *   Wait until all jobs
-        *   are computed
+        *   are computed.
         */
         void
         wait() {
             if (!_run_pool_thread) return;
-            while(!_queue_is_empty) {
-                std::this_thread::sleep_for(std::chrono::nanoseconds(1));
+            while(!queue_is_empty()) {
+                std::this_thread::sleep_for(std::chrono::nanoseconds(100));
             }
             return;
         }
-    
+
+
         /**
-        *   Push a job to do in the thread pool
+        *   Set the thread sleep time.
+        *   Interval is in nanoseconds.
         */
         ThreadPool&
-        push(std::function<T(K)> f, K v) {
-            _safe_queue_push(std::make_pair(f, v));
+        set_sleep_time_ns(int time_ns) {
+            _thread_sleep_time_ns = abs(time_ns);
             return *this;
         }
 
-        // UNDER DEVELOP
-        template<typename ... Args> void
-        variadic_push (std::function<T(K)> first, Args ... args) {
-            assert("Function is not implemented yet");
+        int 
+        sleep_time_ns() {
+            return _thread_sleep_time_ns;
+        }
+
+
+        /**
+        *   Push a job to do in jobs queue.
+        *   Use lamda expressions in order to
+        *   load jobs.
+        */
+        template<class F> void
+        push(const F &f) {
+            _safe_queue_push(f);
         }
     
     private:
+        std::mutex _mutex;
         std::atomic<int> _max_threads;
+        std::atomic<int> _thread_sleep_time_ns;
         std::atomic<bool> _run_pool_thread;
+        std::atomic<size_t> _queue_size;
         std::vector<std::thread> _pool;
-        std::queue<std::pair<std::function<T(K)>, K> > _queue;
-        std::map<std::string, Semaphore> _semaphore_m;
-        std::mutex mutex;
-        std::atomic<bool> _queue_is_empty;
+        std::queue<std::function<void()> > _queue;
+        
 
-
-        template<class N> void
-        _safe_queue_push(const N t) {
-            std::unique_lock<std::mutex> lock(this->mutex);
-            _queue_is_empty = false;
+        template<class F> inline void
+        _safe_queue_push(const F t) {
+            std::unique_lock<std::mutex> lock(this->_mutex);
+            _queue_size++;
             _queue.push(t);
         }
 
-        std::pair<bool, std::pair<std::function<T(K)>, K> >
+        inline std::pair<bool, std::function<void()> >
         _safe_queue_pop() {
-            std::unique_lock<std::mutex> lock(this->mutex);
-            if (_queue.empty()) { 
-                _queue_is_empty = true;
-                return std::make_pair(false, std::pair<std::function<T(K)>, K>()); 
-            }
+            std::unique_lock<std::mutex> lock(this->_mutex);
+            if (_queue.empty()) return std::make_pair(false, std::function<void()>()); 
             auto t = _queue.front();
             _queue.pop();
+            _queue_size--;
             return std::make_pair(true, t);
         }
-
-        bool 
-        _safe_queue_empty() {
-            std::unique_lock<std::mutex> lock(this->mutex);
-            return _queue_is_empty;
-        }
-
 
         void 
         _create_pool() {
@@ -183,33 +180,41 @@ namespace astp {
                 _pool[i] = std::thread(&ThreadPool::_thread_loop_mth, this);
             }
         }
-        
+
+        void
+        _pool_push_thread() {
+            _pool.push_back(std::thread(&ThreadPool::_thread_loop_mth, this));
+            _max_threads++;
+        }
+
+        void
+        _pool_pop_thread() {
+            _pool.back().detach();
+            _pool.pop_back();
+            _max_threads--;
+        }
+
         void 
-        _thread_loop_mth() {
+        _thread_loop_mth() noexcept {
             while(_run_pool_thread) {
                 auto funcf = _safe_queue_pop();
-                if (!funcf.first) { continue; }
-                auto res = funcf.second.first(funcf.second.second);    
+                if (!funcf.first) { 
+                    // Sleep
+                    std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
+                    continue; 
+                }
+                try {
+                    funcf.second();  
+                } catch (...) {
+                    // TODO
+                }
             }
         }
 
-    };
+    }; // End ThreadPool
 
 }; // Namespace end
 
 #endif // __cplusplus
 #endif // _THREAD_POOL_HPP_
 
-
-
-/*
-
-        void 
-        clear() { 
-            _semaphore_m["queue"].wait();
-            std::queue<std::pair<std::function<T(K)>, K> > empty;
-            std::swap(_queue, empty);
-            _semaphore_m["queue"].signal();
-        }
-
-*/
