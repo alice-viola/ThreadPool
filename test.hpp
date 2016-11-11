@@ -29,9 +29,10 @@ public:
     exc_all() {
         create(ThreadPoolTest::random(-100, 1000));
         resize(ThreadPoolTest::random(1, 10));
-        push(ThreadPoolTest::random(0, 100000));
-        set_sleep_time(ThreadPoolTest::random(-100, 1000000000));
-        do_job(ThreadPoolTest::random(0, 100000));
+        push(ThreadPoolTest::random(0, 1'000'000));
+        set_sleep_time(ThreadPoolTest::random(-100, 1'000'000'000));
+        do_job(ThreadPoolTest::random(0, 1000));
+        multithreading_access();
     }
 
     void
@@ -57,7 +58,7 @@ public:
         auto tp = ThreadPool();
         tp.stop();
         for (int i = 0; i < iterations; i++) {
-            tp.push([&] () { });    
+            tp.push([i] () { int a = i * 64; });    
         }
         assert(tp.queue_size() == iterations);
         end_func(start);
@@ -75,6 +76,7 @@ public:
     void
     do_job(int jobs_num) {
         auto start = start_func(__func__, jobs_num);
+        std::cout << "Warning: this could take some time" << std::endl;
         auto tp = ThreadPool();
         for (int i = 0; i < jobs_num; i++) {
             tp.push([&] () { 
@@ -87,6 +89,38 @@ public:
         }
         tp.wait();
         assert(tp.queue_size() == 0);
+        end_func(start);
+    }
+
+    void
+    multithreading_access() {
+        auto start = start_func(__func__, "noargs");
+        auto tp = ThreadPool();
+        auto acc_thread = std::vector<std::thread>(3);
+        for (int i = 0; i < 1; i++) {
+            acc_thread[0] = std::thread([&tp] () {
+                tp.resize(ThreadPoolTest::random(1, 1000));  
+            });
+            acc_thread[1] = std::thread([&tp] () {
+                tp.resize(ThreadPoolTest::random(1, 1000)); 
+            });
+            acc_thread[2] = std::thread([&tp] () {
+                tp.wait(); 
+            });
+            /*acc_thread[3] = std::thread([&tp] () {
+                tp.push([] () { int a = 2 + 2; }); 
+            });
+            acc_thread[4] = std::thread([&tp] () {
+                tp.set_sleep_time_ns(ThreadPoolTest::random(1, 10000000)); 
+            });
+            acc_thread[6] = std::thread([&tp] () {
+                tp.resize(ThreadPoolTest::random(1, 1000)); 
+            });*/
+            for (int i = 0; i < acc_thread.size(); i++) {
+                acc_thread[i].join();
+            }
+            tp.wait();
+        }
         end_func(start);
     }
 

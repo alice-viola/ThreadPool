@@ -17,6 +17,36 @@
 
 namespace astp {
 
+    class Semaphore 
+    {
+    public:
+        Semaphore(bool sem_count = true) : sem_count_(sem_count) {};
+        Semaphore(const Semaphore &S) : mutex_(), cv_() {};
+        Semaphore& operator=(Semaphore S) { return *this; }
+        ~Semaphore() {};
+
+        void
+        wait() {
+            std::unique_lock<std::mutex> lock(this->mutex_);
+            while(sem_count_ != true) {
+                cv_.wait(lock);
+            }
+            sem_count_ = false;
+        }
+
+        void 
+        signal() {
+            std::unique_lock<std::mutex> lock(this->mutex_);
+            cv_.notify_one();
+            sem_count_ = true;
+        }
+
+    private:
+        std::condition_variable cv_;
+        std::mutex mutex_;
+        std::atomic<bool> sem_count_;
+    };
+
 
     class ThreadPool
     {
@@ -28,11 +58,16 @@ namespace astp {
         *   At least one thread is created.
         */
         ThreadPool(int max_threads = std::thread::hardware_concurrency()) : 
-            _max_threads(0), 
+            _max_threads(0),
+            _thread_terminate_count(0), 
             _queue_size(0),
-            _thread_sleep_time_ns(100000000),
-            _run_pool_thread(true)
+            _thread_sleep_time_ns(100'000'000),
+            _run_pool_thread(true),
+            _push_c(0),
+            _comp_c(0)
         {
+            _sem_api = Semaphore(0);
+            _sem_job_ins_container = Semaphore(0);
             resize(max_threads < 1 ? 1 : max_threads);
         }; 
 
@@ -57,26 +92,52 @@ namespace astp {
         *   the abs value of num_threads is taken.
         */
         ThreadPool&
-        resize(int num_threads = std::thread::hardware_concurrency()) {
-            std::unique_lock<std::mutex> lock(_mutex_pool);
+        resize(int num_threads = std::thread::hardware_concurrency()) noexcept {
+            _sem_api.wait();
             if (num_threads < 1) { num_threads = 1; }
             int diff = abs(num_threads - (int)_max_threads);
             if (num_threads > _max_threads) {
-                //_pool.reserve(_pool.size() + diff); TOCHECK
                 for (int i = 0; i < diff; i++) _pool_push_thread();
             } else {
                 for (int i = 0; i < diff; i++) _pool_pop_thread();
             }
+            _sem_api.signal();
             return *this;
         }
 
         /**
-        *   Convenience method.
-        *   Adapt the pool size to the jobs queue size.
+        *   Stop execution, detach all
+        *   jobs under processing.
+        */ 
+        void
+        stop() noexcept {
+            if (!_run_pool_thread) return;
+            _sem_api.wait();
+            int current_threads_num = _max_threads;
+            _run_pool_thread = false;
+            while(_max_threads != 0) {
+                _pool_pop_thread();
+            } 
+            while(current_threads_num != _thread_terminate_count) {
+                std::this_thread::yield();
+            }
+            _thread_terminate_count = 0;
+            _sem_api.signal();
+        }
+
+        /**
+        *   Wait until all jobs
+        *   are computed.
         */
-        ThreadPool&
-        autofit() {
-            return resize(_queue_size);
+        void
+        wait() noexcept {
+            if (!_run_pool_thread) return;
+            while((_push_c != _comp_c)) {
+                std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
+            }
+            _push_c = 0;
+            _comp_c = 0;
+            return;
         }
 
         /**
@@ -84,7 +145,7 @@ namespace astp {
         *   thread pool.
         */
         int 
-        pool_size() { 
+        pool_size() noexcept { 
             return _max_threads; 
         }
 
@@ -94,34 +155,8 @@ namespace astp {
         }
 
         bool 
-        queue_is_empty() {
+        queue_is_empty() noexcept {
             return _queue_size == 0;
-        }
-
-        /**
-        *   Stop execution, detach all
-        *   jobs under processing.
-        */ 
-        void
-        stop() {
-            if (!_run_pool_thread) return;
-            _run_pool_thread = false;
-            while(_max_threads != 0) {
-                _pool_pop_thread();
-            }
-        }
-
-        /**
-        *   Wait until all jobs
-        *   are computed.
-        */
-        void
-        wait() {
-            if (!_run_pool_thread) return;
-            while(!queue_is_empty()) {
-                std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-            }
-            return;
         }
 
         /**
@@ -129,24 +164,35 @@ namespace astp {
         *   Interval is in nanoseconds.
         */
         ThreadPool&
-        set_sleep_time_ns(int time_ns) {
+        set_sleep_time_ns(int time_ns) noexcept {
             _thread_sleep_time_ns = abs(time_ns);
             return *this;
         }
 
         int 
-        sleep_time_ns() {
+        sleep_time_ns() noexcept {
             return _thread_sleep_time_ns;
         }
 
         /**
         *   Push a job to do in jobs queue.
-        *   Use lamda expressions in order to
+        *   Use lambda expressions in order to
         *   load jobs.
         */
         template<class F> void
-        push(const F &f) {
+        push(const F &f) noexcept {
+            _push_c++;
             _safe_queue_push(f);
+        }
+
+        void 
+        synchronize() {
+            _sem_job_ins_container.wait();
+        }
+
+        void 
+        end_synchronize() {
+            _sem_job_ins_container.signal();
         }
     
     private:
@@ -159,6 +205,17 @@ namespace astp {
         *   Mutex for pool resize. 
         */
         std::mutex _mutex_pool;
+        
+        /** 
+        *   Semaphore for class thread-safety. 
+        */
+        Semaphore _sem_api;
+
+        /**
+        *   Optional semaphore for jobs lambda data
+        *   protection in critical sections.
+        */
+        Semaphore _sem_job_ins_container;
 
         /** 
         *   Time in nanoseconds which threads
@@ -179,7 +236,12 @@ namespace astp {
         std::vector<std::thread> _pool;
         std::queue<std::function<void()> > _queue;
         std::vector<std::thread::id> _thread_to_terminate;
+        std::atomic<int> _thread_terminate_count;
         
+        std::atomic<int> _push_c;
+        std::atomic<int> _comp_c;
+
+
         /**
         *   Lock the queue mutex for
         *   a safe insertion in the queue.
@@ -220,7 +282,6 @@ namespace astp {
             _max_threads++;
         }
 
-
         /**
         *   Called when the ThreadPool is deleted 
         *   or the user has required both a resize 
@@ -228,10 +289,24 @@ namespace astp {
         */
         void 
         _pool_pop_thread() {
+            std::unique_lock<std::mutex> lock(_mutex_pool);
+            if (_pool.empty()) return; 
             _thread_to_terminate.push_back(_pool.back().get_id());
             _pool.back().detach();
             _pool.pop_back();
             _max_threads--;
+        }
+
+        inline bool
+        _pool_check_terminate_thread(std::thread::id thread_id) {
+            std::unique_lock<std::mutex> lock(_mutex_pool);
+            for (int i = 0; i < _thread_to_terminate.size(); i++) {
+                if (std::this_thread::get_id() == _thread_to_terminate[i]) {
+                    _thread_to_terminate.erase(_thread_to_terminate.begin() + i);
+                    return true;
+                }
+            }
+            return false;
         }
 
         /**
@@ -245,13 +320,7 @@ namespace astp {
         void 
         _thread_loop_mth() noexcept {
             while(_run_pool_thread) {
-                for (int i = 0; i < _thread_to_terminate.size(); i++) {
-                    if (std::this_thread::get_id() == _thread_to_terminate[i]) {
-                        // Exit and terminate thread
-                        _thread_to_terminate.erase(_thread_to_terminate.begin() + i);
-                        return;
-                    }
-                }
+                if (_pool_check_terminate_thread(std::this_thread::get_id())) break;
                 auto funcf = _safe_queue_pop();
                 if (!funcf.first) { 
                     // Sleep
@@ -259,11 +328,13 @@ namespace astp {
                     continue; 
                 }
                 try {
-                    funcf.second();  
+                    funcf.second();
+                    _comp_c++;  
                 } catch (...) {
                     // TODO
                 }
             }
+            _thread_terminate_count++;
         }
 
     }; // End ThreadPool

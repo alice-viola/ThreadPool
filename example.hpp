@@ -16,6 +16,7 @@ ThreadPool tp = ThreadPool();
 //#############################################################################
 //#############################################################################
 
+
 void 
 simple_func() {
     std::cout << "I'm a func called async" << std::endl;
@@ -54,6 +55,43 @@ example_inline_code(int number_of_calls) {
 //#############################################################################
 //#############################################################################
 
+
+void 
+example_inline_code_and_save(int number) {
+    tp.wait();
+    int number_double; 
+    tp.push([number, &number_double] () {
+        number_double = 2 * number;
+    });
+    tp.wait();
+    std::cout << "Double number: " << number_double;
+}
+
+
+//#############################################################################
+//#############################################################################
+
+
+void
+example_inline_code_and_save_vec(int number) {
+    tp.wait();
+    auto data = std::vector<int>();
+    for (int i = 0; i < number; i++) {
+        tp.push([&, i] () {
+            auto double_num = i * 2;
+            tp.synchronize();
+            data.push_back(double_num);
+            tp.end_synchronize();
+        });
+    }
+    tp.wait();
+    for (auto &d : data) 
+        std::cout << d << std::endl;
+}
+
+
+//#############################################################################
+//#############################################################################
 
 class JobTest
 {
