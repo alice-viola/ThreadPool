@@ -1,4 +1,4 @@
-CC=g++ -std=c++14
+CC=g++ -std=c++11
 OPT=-O3
 DEPS=threadpool.hpp test.hpp example.hpp
 OBJ=main.o 

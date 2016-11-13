@@ -29,9 +29,9 @@ public:
     exc_all() {
         create(ThreadPoolTest::random(-100, 1000));
         resize(ThreadPoolTest::random(1, 10));
-        push(ThreadPoolTest::random(0, 1'000'000));
-        set_sleep_time(ThreadPoolTest::random(-100, 1'000'000'000));
-        do_job(ThreadPoolTest::random(0, 1000));
+        push(ThreadPoolTest::random(0, 1000000));
+        set_sleep_time(ThreadPoolTest::random(-100, 1000000000));
+        do_job(ThreadPoolTest::random(0, 10000));
         multithreading_access();
     }
 
@@ -107,15 +107,6 @@ public:
             acc_thread[2] = std::thread([&tp] () {
                 tp.wait(); 
             });
-            /*acc_thread[3] = std::thread([&tp] () {
-                tp.push([] () { int a = 2 + 2; }); 
-            });
-            acc_thread[4] = std::thread([&tp] () {
-                tp.set_sleep_time_ns(ThreadPoolTest::random(1, 10000000)); 
-            });
-            acc_thread[6] = std::thread([&tp] () {
-                tp.resize(ThreadPoolTest::random(1, 1000)); 
-            });*/
             for (int i = 0; i < acc_thread.size(); i++) {
                 acc_thread[i].join();
             }
@@ -123,7 +114,6 @@ public:
         }
         end_func(start);
     }
-
 
     static int
     random(int min, int max) {
