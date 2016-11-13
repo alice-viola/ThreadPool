@@ -30,6 +30,7 @@ public:
         create(ThreadPoolTest::random(-100, 1000));
         resize(ThreadPoolTest::random(1, 10));
         push(ThreadPoolTest::random(0, 1000000));
+        varidic_push(ThreadPoolTest::random(0, 1000000));
         set_sleep_time(ThreadPoolTest::random(-100, 1000000000));
         do_job(ThreadPoolTest::random(0, 10000));
         multithreading_access();
@@ -61,6 +62,18 @@ public:
             tp.push([i] () { int a = i * 64; });    
         }
         assert(tp.queue_size() == iterations);
+        end_func(start);
+    }
+
+    void
+    varidic_push(int iterations) {
+        auto start = start_func(__func__, iterations);
+        auto tp = ThreadPool();
+        tp.stop();
+        for (int i = 0; i < iterations; i++) {
+            tp.push([i] () { int a = i * 64; }, [i] () { int a = i * 128; } );    
+        }
+        assert(tp.queue_size() == 2 * iterations);
         end_func(start);
     }
 

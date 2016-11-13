@@ -16,7 +16,7 @@ and LinuxMint 17.1 Rebecca (g++ 4.8.2).
 
 ## Compile
 You can run some example called in the provided main.cpp file
-the following bash lines, or simply include the *threadpool.hpp* file
+with the following bash lines, or simply include the *threadpool.hpp* file
 in your projects.
 
 for macOS (and OSX as well):
@@ -92,6 +92,19 @@ tp.resize(128);
 tp.push([&]() {
 	// Push something
 });
+
+/**
+*	Push.
+*	Variadic template form.
+*	Callable from every thread.
+*/
+tp.push([&]() {
+	// Push something 1
+},
+[=]() {
+	// Push something 2
+}
+);
 
 /**
 *	Wait the end of execution

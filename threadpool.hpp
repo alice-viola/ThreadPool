@@ -116,10 +116,17 @@ namespace astp {
         *   Use lambda expressions in order to
         *   load jobs.
         */
-        template<class F> void
+        template<class F> ThreadPool&
         push(const F &f) noexcept {
             _push_c++;
             _safe_queue_push(f);
+            return *this;
+        }
+
+        template<class F, class ...Args> ThreadPool&
+        push(const F &f, Args... args) noexcept {
+            push(f).push(args...);
+            return *this;
         }
 
         ThreadPool&
