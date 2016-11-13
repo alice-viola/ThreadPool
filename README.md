@@ -11,7 +11,25 @@ Features:
 * Thread safe [under testing]
 * Single header [threadpool.hpp]
 
-The ThreadPool is tested under macOS Sierra 10.12,
+The ThreadPool is tested under macOS Sierra 10.12 (Apple LLVM version 7.2.0 (clang-702.0.25)) 
+and LinuxMint 17.1 Rebecca (g++ 4.8.2).
+
+## Compile
+You can run some example called in the provided main.cpp file
+the following bash lines, or simply include the *threadpool.hpp* file
+in your projects.
+
+for macOS (and OSX as well):
+```bash
+g++ -std=c++11 -O3 main.cpp
+```
+
+for Linux:
+```bash
+g++ -std=c++11 -O3 -pthread main.cpp
+```
+
+The -O3 optimization parameter is obviously optional.
 
 ## Usage example 
 ```C++
