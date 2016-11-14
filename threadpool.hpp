@@ -123,6 +123,11 @@ namespace astp {
             return *this;
         }
 
+        /**
+        *   Push multiple jobs to do in jobs queue.
+        *   Use lambda expressions in order to
+        *   load jobs.
+        */
         template<class F, class ...Args> ThreadPool&
         push(const F &f, Args... args) noexcept {
             push(f).push(args...);
@@ -154,7 +159,7 @@ namespace astp {
             while(_max_threads != 0) 
                 _pool_pop_thread();
             while(current_threads_num != _thread_terminate_count) 
-                std::this_thread::yield();
+                std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
             _thread_terminate_count = 0;
             _sem_api.signal();
             return *this;
@@ -203,11 +208,32 @@ namespace astp {
             return *this;
         }
 
+        /**
+        *   Set the thread sleep time.
+        *   Interval is in milliseconds.
+        */
+        ThreadPool&
+        set_sleep_time_ms(int time_ms) noexcept {
+            _thread_sleep_time_ns = abs(time_ms * 1000000);
+            return *this;
+        }
+
+        /**
+        *   Set the thread sleep time.
+        *   Interval is in seconds
+        *   and can be a floating point value.
+        */
+        template<class F> ThreadPool&
+        set_sleep_time_s(F time_s) noexcept {
+            _thread_sleep_time_ns = abs(static_cast<int>(time_s * 1000000000));
+            return *this;
+        }
+
         int 
         sleep_time_ns() noexcept {
             return _thread_sleep_time_ns;
         }
-    
+
     private:
         /** 
         *   Mutex for queue access. 
@@ -268,20 +294,16 @@ namespace astp {
 
         /**
         *   Lock the queue mutex, safely pop
-        *   job from the queue if not empty;
-        *   returns a pair where the first value
-        *   is false if the queue is empty, the 
-        *   second value is the lamda expression
-        *   to execute.
+        *   job from the queue if not empty.
         */
-        inline std::pair<bool, std::function<void()> >
+        inline std::function<void()>
         _safe_queue_pop() {
             std::unique_lock<std::mutex> lock(_mutex_queue);
-            if (_queue.empty()) return std::make_pair(false, std::function<void()>()); 
+            if (_queue.empty()) return std::function<void()>(); 
             auto t = _queue.front();
             _queue.pop();
             _queue_size--;
-            return std::make_pair(true, t);
+            return t;
         }
 
         /**
@@ -335,13 +357,14 @@ namespace astp {
             while(_run_pool_thread) {
                 if (_pool_check_terminate_thread(std::this_thread::get_id())) break;
                 auto funcf = _safe_queue_pop();
-                if (!funcf.first) { 
+                if (!funcf) { 
                     // Sleep
                     std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
                     continue; 
                 }
+                //std::cout << "RUN: " << std::this_thread::get_id() << std::endl;
                 try {
-                    funcf.second();
+                    funcf();
                     _comp_c++;  
                 } catch (...) {
                     // TODO
