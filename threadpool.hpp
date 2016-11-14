@@ -95,7 +95,7 @@ namespace astp {
             _max_threads(0),
             _thread_to_kill_c(),
             _queue_size(0),
-            _thread_sleep_time_ns(100000000),
+            _thread_sleep_time_ns(1000),
             _run_pool_thread(true),
             _push_c(0),
             _comp_c(0)
@@ -131,9 +131,9 @@ namespace astp {
             if (num_threads < 1) { num_threads = 1; }
             int diff = abs(num_threads - (int)_max_threads);
             if (num_threads > _max_threads) {
-                for (int i = 0; i < diff; i++) _pool_push_thread();
+                for (int i = 0; i < diff; i++) _safe_thread_push();
             } else {
-                for (int i = 0; i < diff; i++) _pool_pop_thread();
+                for (int i = 0; i < diff; i++) _safe_thread_pop();
             }
             _sem_api.signal();
             return *this;
@@ -144,7 +144,7 @@ namespace astp {
         *   Use lambda expressions in order to
         *   load jobs.
         */
-        template<class F> ThreadPool&
+        template<class F> inline ThreadPool&
         push(const F &f) noexcept {
             _push_c++;
             _safe_queue_push(f);
@@ -156,20 +156,20 @@ namespace astp {
         *   Use lambda expressions in order to
         *   load jobs.
         */
-        template<class F, class ...Args> ThreadPool&
+        template<class F, class ...Args> inline ThreadPool&
         push(const F &f, Args... args) noexcept {
             push(f).push(args...);
             return *this;
         }
 
-        ThreadPool&
-        synchronize() {
+        inline ThreadPool&
+        synchronize() noexcept {
             _sem_job_ins_container.wait();
             return *this;
         }
 
-        ThreadPool&
-        end_synchronize() {
+        inline ThreadPool&
+        end_synchronize() noexcept {
             _sem_job_ins_container.signal();
             return *this;
         }
@@ -184,7 +184,7 @@ namespace astp {
             _sem_api.wait();
             int current_threads_num = _max_threads;
             _run_pool_thread = false;
-            while(_max_threads != 0) _pool_pop_thread();
+            while(_max_threads != 0) _safe_thread_pop();
             while(_thread_to_kill_c != 0) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
             }
@@ -336,7 +336,7 @@ namespace astp {
         *   operation.
         */
         inline void 
-        _pool_push_thread() {
+        _safe_thread_push() {
             _pool.push_back(std::thread(&ThreadPool::_thread_loop_mth, this));
             _max_threads++;
         }
@@ -347,7 +347,7 @@ namespace astp {
         *   operation or a stop operation.
         */
         inline void 
-        _pool_pop_thread() {
+        _safe_thread_pop() {
             std::unique_lock<std::mutex> lock(_mutex_pool);
             if (_pool.empty()) return; 
             _thread_to_kill_c++;
@@ -370,7 +370,8 @@ namespace astp {
                 if (_thread_to_kill_c != 0) break;
                 auto funcf = _safe_queue_pop();
                 if (!funcf) { 
-                    std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
+                    if (_thread_sleep_time_ns != 0) 
+                        std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
                     continue; 
                 }
                 try {

@@ -182,6 +182,20 @@ for (auto &d : data)
     std::cout << d << std::endl;
 ```
 
+## Performance
+This test was a write to text test: write one million of lines
+in a *iterations* number of different text files.
+NT means the sequential version, TP[num] means the number of
+threads in the threadpool.
+
+![Test performance](images/test.png)
+
+
+Test function:
+```C++
+
+```
+
 ## To Do
 I'm working on the exception handling, and on the concept of *group of jobs*, that will 
 make possible to track the state of a group of tasks in the pool queue.
