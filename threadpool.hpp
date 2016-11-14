@@ -1,3 +1,29 @@
+/**
+*
+*   The MIT License (MIT)
+*   
+*   Copyright (c) 2016 Amedeo Setti
+*   
+*   Permission is hereby granted, free of charge, to any person obtaining a copy
+*   of this software and associated documentation files (the "Software"), to deal
+*   in the Software without restriction, including without limitation the rights
+*   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+*   copies of the Software, and to permit persons to whom the Software is
+*   furnished to do so, subject to the following conditions:
+*   
+*   The above copyright notice and this permission notice shall be included in all
+*   copies or substantial portions of the Software.
+*   
+*   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+*   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+*   FITNESS FOR A PARTICULAR PURPOSE AND NON INFRINGEMENT. IN NO EVENT SHALL THE
+*   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+*   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+*   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+*   SOFTWARE
+*
+**/
+
 #ifndef _THREAD_POOL_HPP_
 #define _THREAD_POOL_HPP_
 #ifdef __cplusplus
@@ -10,6 +36,7 @@
 #include <functional>
 #include <vector>
 #include <map>
+#include <string>
 #include <queue>
 #include <chrono>
 #include <assert.h>
@@ -32,31 +59,32 @@ namespace astp {
         class Semaphore 
         {
         public:
-            Semaphore(bool sem_count = true) : sem_value_(sem_count) {};
-            Semaphore(const Semaphore &S) : mutex_(), cv_() {};
+            Semaphore(bool sem_count = true) : _sem_value(sem_count) {};
+            Semaphore(const Semaphore &S) : _mutex(), _cv() {};
             Semaphore& operator=(Semaphore S) { return *this; }
             ~Semaphore() {};
     
             inline void
             wait() {
-                std::unique_lock<std::mutex> lock(mutex_);
-                while(sem_value_ != true) cv_.wait(lock);
-                sem_value_ = false;
+                std::unique_lock<std::mutex> lock(_mutex);
+                while(_sem_value != true) _cv.wait(lock);
+                _sem_value = false;
             }
     
             inline void 
             signal() {
-                std::unique_lock<std::mutex> lock(mutex_);
-                cv_.notify_one();
-                sem_value_ = true;
+                std::unique_lock<std::mutex> lock(_mutex);
+                _cv.notify_one();
+                _sem_value = true;
             }
     
         private:
-            std::condition_variable cv_;
-            std::mutex mutex_;
-            std::atomic<bool> sem_value_;
+            std::condition_variable _cv;
+            std::mutex _mutex;
+            std::atomic<bool> _sem_value;
         };
 
+        
         /**
         *   If *max_threads* is not specified,
         *   the pool size is set to the max number
@@ -65,7 +93,7 @@ namespace astp {
         */
         ThreadPool(int max_threads = std::thread::hardware_concurrency()) : 
             _max_threads(0),
-            _thread_terminate_count(0), 
+            _thread_to_kill_c(),
             _queue_size(0),
             _thread_sleep_time_ns(100000000),
             _run_pool_thread(true),
@@ -156,11 +184,10 @@ namespace astp {
             _sem_api.wait();
             int current_threads_num = _max_threads;
             _run_pool_thread = false;
-            while(_max_threads != 0) 
-                _pool_pop_thread();
-            while(current_threads_num != _thread_terminate_count) 
+            while(_max_threads != 0) _pool_pop_thread();
+            while(_thread_to_kill_c != 0) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
-            _thread_terminate_count = 0;
+            }
             _sem_api.signal();
             return *this;
         }
@@ -189,7 +216,7 @@ namespace astp {
         }
 
         size_t
-        queue_size() {
+        queue_size() noexcept {
             return _queue_size;
         }
 
@@ -274,12 +301,9 @@ namespace astp {
         std::atomic<size_t> _queue_size;
         std::vector<std::thread> _pool;
         std::queue<std::function<void()> > _queue;
-        std::vector<std::thread::id> _thread_to_terminate;
-        std::atomic<int> _thread_terminate_count;
-        
+        std::atomic<int> _thread_to_kill_c;
         std::atomic<int> _push_c;
         std::atomic<int> _comp_c;
-
 
         /**
         *   Lock the queue mutex for
@@ -326,22 +350,10 @@ namespace astp {
         _pool_pop_thread() {
             std::unique_lock<std::mutex> lock(_mutex_pool);
             if (_pool.empty()) return; 
-            _thread_to_terminate.push_back(_pool.back().get_id());
+            _thread_to_kill_c++;
             _pool.back().detach();
             _pool.pop_back();
             _max_threads--;
-        }
-
-        inline bool
-        _pool_check_terminate_thread(std::thread::id thread_id) {
-            std::unique_lock<std::mutex> lock(_mutex_pool);
-            for (int i = 0; i < _thread_to_terminate.size(); i++) {
-                if (std::this_thread::get_id() == _thread_to_terminate[i]) {
-                    _thread_to_terminate.erase(_thread_to_terminate.begin() + i);
-                    return true;
-                }
-            }
-            return false;
         }
 
         /**
@@ -355,14 +367,12 @@ namespace astp {
         void 
         _thread_loop_mth() noexcept {
             while(_run_pool_thread) {
-                if (_pool_check_terminate_thread(std::this_thread::get_id())) break;
+                if (_thread_to_kill_c != 0) break;
                 auto funcf = _safe_queue_pop();
                 if (!funcf) { 
-                    // Sleep
                     std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
                     continue; 
                 }
-                //std::cout << "RUN: " << std::this_thread::get_id() << std::endl;
                 try {
                     funcf();
                     _comp_c++;  
@@ -370,7 +380,7 @@ namespace astp {
                     // TODO
                 }
             }
-            _thread_terminate_count++;
+            _thread_to_kill_c--;
         }
 
     }; // End ThreadPool

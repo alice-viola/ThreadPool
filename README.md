@@ -7,7 +7,7 @@ Features:
 * Task insertion via lambda expressions
 * Resize of the pool at runtime
 * Support virtually an infinite number of threads in the pool
-* Wait and Stop methods
+* Fast
 * Thread safe [under testing]
 * Single header [threadpool.hpp]
 
@@ -183,4 +183,5 @@ for (auto &d : data)
 ```
 
 ## To Do
-I'm working on the exception handling.
+I'm working on the exception handling, and on the concept of *group of jobs*, that will 
+make possible to track the state of a group of tasks in the pool queue.
