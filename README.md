@@ -193,7 +193,14 @@ threads in the threadpool.
 
 Test function:
 ```C++
-
+void
+write(int i) {
+    std::ofstream myfile;
+    myfile.open ("example" + std::to_string(i) + (".txt"));
+    for(int k = 0; k < 1000000; k++) 
+        myfile << "Writing this to a file.\n";
+    myfile.close();
+}
 ```
 
 ## To Do
