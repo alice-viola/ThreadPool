@@ -142,19 +142,26 @@ auto sleep_time = tp.sleep_time_ns();
 tp.synchronize();
 tp.end_synchronize();
 
-
 /**
 *   Dispatch Group Methods
 *
 *   The following are the methods that
 *   you need to call if you want to
-*   do jobs in *groups*.
+*   do jobs in *groups*. 
+*   A detailed description is in the 
+*   file threadpool.hpp.
+*
+*   These functions appends a little (again, little)
+*   overhead, so use when really needed.
 */
 tp.dispatch_group_enter("groupname");
 tp.dispatch_group_insert("groupname", []() { /* task1 */ });
 tp.dispatch_group_insert("groupname", []() { /* task2 */ });
 tp.dispatch_group_leave("groupname");  
 tp.dispatch_group_wait("groupname");
+tp.dispatch_group_wait("groupname", []() { /* Fired when the group has been entirely computed */ });
+tp.dispatch_group_synchronize("groupname");
+tp.dispatch_group_end_synchronize("groupname");
 
 /**
 *	Misc
