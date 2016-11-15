@@ -7,7 +7,9 @@ Features:
 * Task insertion via lambda expressions
 * Resize of the pool at runtime
 * Support virtually an infinite number of threads in the pool
+* Fluent-Interface for task insertion
 * Fast
+* Dispatch groups methods
 * Thread safe [under testing]
 * Single header [threadpool.hpp]
 
@@ -105,6 +107,12 @@ tp.push([&]() {
 	// Push something 2
 }
 );
+
+/**
+*   Push, operator <<.
+*   Callable from every thread.
+*/
+tp << [](){print("Hi!");} << [](){print("iH!");};
 
 /**
 *	Wait the end of execution

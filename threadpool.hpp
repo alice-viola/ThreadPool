@@ -29,7 +29,6 @@
 #ifdef __cplusplus
 
 #include <thread>
-#include <future>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
@@ -38,8 +37,10 @@
 #include <map>
 #include <string>
 #include <queue>
-#include <chrono>
 #include <assert.h>
+#ifdef DEBUG
+#include <iostream>
+#endif
 
 namespace astp {
     /**
@@ -60,7 +61,7 @@ namespace astp {
         *   \___ \ / _ \ '_ ` _ \ / _` | '_ \| '_ \ / _ \| '__/ _ \
         *    ___) |  __/ | | | | | (_| | |_) | | | | (_) | | |  __/
         *   |____/ \___|_| |_| |_|\__,_| .__/|_| |_|\___/|_|  \___|
-        *                      |_|                         
+        *                              |_|                         
         *
         *
         *   Internal ThreadPool class 
@@ -94,7 +95,6 @@ namespace astp {
             std::mutex _mutex;
             std::atomic<bool> _sem_value;
         };
-
         /**
         *    ____  _                 _       _      ____                       
         *   |  _ \(_)___ _ __   __ _| |_ ___| |__  / ___|_ __ ___  _   _ _ __  
@@ -116,43 +116,47 @@ namespace astp {
                 _closed(false),
                 _jobs_done_counter(0),
                 _jobs_count_at_leave(0) {};
-            DispatchGroup(const DispatchGroup &DP) :
+            DispatchGroup(DispatchGroup&& DP) noexcept :
                 _id(DP.id()), 
                 _closed(DP.is_leave()),
                 _jobs_done_counter(0),
                 _jobs_count_at_leave(0) {};
+            DispatchGroup& operator = (DispatchGroup&& DP) = default;
+            DispatchGroup(const DispatchGroup& DP) = delete;
+            DispatchGroup& operator = (const DispatchGroup& DP) = delete;
+
             ~DispatchGroup() {};
 
             inline void 
-            leave() noexcept {
+            leave()  {
                 _closed = true;
                 _jobs_count_at_leave = _jobs.size();
             }
 
             inline bool
-            is_leave() const noexcept { return _closed; }
+            is_leave() const  { return _closed; }
 
             template<class F> inline void
-            insert(const F &f) noexcept {
+            insert(const F &f)  {
                 if (_closed) return;
                 auto func = [=] () { f(); _signal_end_of_job(); };
                 _jobs.push_back(func);
             }
 
             inline std::vector<std::function<void()> > 
-            jobs() noexcept { return _jobs; }
+            jobs()  { return _jobs; }
 
             inline bool
-            has_finished() noexcept {
+            has_finished()  {
                 if (_jobs_done_counter == _jobs_count_at_leave && _closed) return true;
                 return false;
             }
 
             inline std::string
-            id() const noexcept { return _id; }
+            id() const  { return _id; }
 
             inline int
-            jobs_count() noexcept { return _jobs.size(); }
+            jobs_count()  { return _jobs.size(); }
 
             inline void
             synchronize() {
@@ -187,11 +191,9 @@ namespace astp {
         ThreadPool(int max_threads = std::thread::hardware_concurrency()) : 
             _max_threads(0),
             _thread_to_kill_c(),
-            _queue_size(0),
             _thread_sleep_time_ns(1000),
             _run_pool_thread(true),
-            _push_c(0),
-            _comp_c(0)
+            _push_c(0)
         {
             _sem_api = Semaphore(0);
             _sem_job_ins_container = Semaphore(0);
@@ -201,7 +203,7 @@ namespace astp {
         /**
         *   Copy constructor.
         */ 
-        ThreadPool(const ThreadPool &TP) {};
+        ThreadPool(const ThreadPool &TP) noexcept {};
     
         /**
         *   When the ThreadPool is deallocated,
@@ -218,8 +220,8 @@ namespace astp {
         *   Update size for the thread pool;
         *   the abs value of num_threads is taken.
         */
-        ThreadPool&
-        resize(int num_threads = std::thread::hardware_concurrency()) noexcept {
+        void
+        resize(int num_threads = std::thread::hardware_concurrency()) {
             _sem_api.wait();
             if (num_threads < 1) { num_threads = 1; }
             int diff = abs(num_threads - (int)_max_threads);
@@ -229,7 +231,6 @@ namespace astp {
                 for (int i = 0; i < diff; i++) _safe_thread_pop();
             }
             _sem_api.signal();
-            return *this;
         }
 
         /**
@@ -238,11 +239,22 @@ namespace astp {
         *   load jobs.
         */
         template<class F> inline ThreadPool&
-        push(const F &f) noexcept {
+        push(const F &f) {
             _push_c++;
             _safe_queue_push(f);
             return *this;
         }
+
+        /**
+        *   Push a job to do in jobs queue.
+        *   Use lambda expressions in order to
+        *   load jobs. Overload operator <<.
+        */
+        template<class F> inline ThreadPool&
+        operator<<(const F &f) {
+            push(f);
+            return *this;
+        } 
 
         /**
         *   Push multiple jobs to do in jobs queue.
@@ -250,21 +262,19 @@ namespace astp {
         *   load jobs.
         */
         template<class F, class ...Args> inline ThreadPool&
-        push(const F &f, Args... args) noexcept {
+        push(const F &f, Args... args) {
             push(f).push(args...);
             return *this;
         }
 
-        inline ThreadPool&
-        synchronize() noexcept {
+        inline void
+        synchronize() {
             _sem_job_ins_container.wait();
-            return *this;
         }
 
-        inline ThreadPool&
-        end_synchronize() noexcept {
+        inline void
+        end_synchronize() {
             _sem_job_ins_container.signal();
-            return *this;
         }
 
         /**
@@ -272,18 +282,16 @@ namespace astp {
         *   jobs under processing.
         *   This is a thread blocking call.
         */ 
-        ThreadPool&
-        stop() noexcept {
-            if (!_run_pool_thread) return *this;
+        void
+        stop() {
+            if (!_run_pool_thread) return;
             _sem_api.wait();
-            int current_threads_num = _max_threads;
             _run_pool_thread = false;
             while(_max_threads != 0) _safe_thread_pop();
             while(_thread_to_kill_c != 0) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
             }
             _sem_api.signal();
-            return *this;
         }
 
         /**
@@ -291,14 +299,11 @@ namespace astp {
         *   are computed.
         *   This is a thread blocking call.
         */
-        ThreadPool&
-        wait() noexcept {
-            if (!_run_pool_thread) return *this;
-            while((_push_c != _comp_c)) 
+        void
+        wait() {
+            if (!_run_pool_thread) return;
+            while((_push_c != 0)) 
                 std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
-            _push_c = 0;
-            _comp_c = 0;
-            return *this;
         }
 
         /**
@@ -306,38 +311,38 @@ namespace astp {
         *   thread pool.
         */
         int 
-        pool_size() noexcept { 
+        pool_size() { 
             return _max_threads; 
         }
 
         size_t
-        queue_size() noexcept {
-            return _queue_size;
+        queue_size() {
+            std::unique_lock<std::mutex> lock(_mutex_queue);
+            return _queue.size();
         }
 
         bool 
-        queue_is_empty() noexcept {
-            return _queue_size == 0;
+        queue_is_empty() {
+            std::unique_lock<std::mutex> lock(_mutex_queue);
+            return _queue.empty();
         }
 
         /**
         *   Set the thread sleep time.
         *   Interval is in nanoseconds.
         */
-        ThreadPool&
-        set_sleep_time_ns(const int time_ns) noexcept {
+        void
+        set_sleep_time_ns(const int time_ns) {
             _thread_sleep_time_ns = abs(time_ns);
-            return *this;
         }
 
         /**
         *   Set the thread sleep time.
         *   Interval is in milliseconds.
         */
-        ThreadPool&
-        set_sleep_time_ms(const int time_ms) noexcept {
+        void
+        set_sleep_time_ms(const int time_ms) {
             _thread_sleep_time_ns = abs(time_ms * 1000000);
-            return *this;
         }
 
         /**
@@ -345,14 +350,13 @@ namespace astp {
         *   Interval is in seconds
         *   and can be a floating point value.
         */
-        template<class F> ThreadPool&
-        set_sleep_time_s(F time_s) noexcept {
+        template<class F> void
+        set_sleep_time_s(F time_s) {
             _thread_sleep_time_ns = abs(static_cast<int>(time_s * 1000000000));
-            return *this;
         }
 
         int 
-        sleep_time_ns() noexcept {
+        sleep_time_ns() {
             return _thread_sleep_time_ns;
         }
 
@@ -371,14 +375,13 @@ namespace astp {
         *   Create a new group with an std::string 
         *   identifier.
         */
-        ThreadPool&
-        dispatch_group_enter(const std::string id) noexcept {
+        void
+        dispatch_group_enter(std::string id) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
             it = _groups.find(id);
-            if (it != _groups.end()) return *this;
-            _groups.insert(std::make_pair(id, DispatchGroup(id)));
-            return *this;
+            if (it != _groups.end()) return;
+            _groups.insert(std::make_pair(id, std::move(DispatchGroup(id))));
         }
         /**
         *   Insert a job to do in a specific group.
@@ -386,76 +389,69 @@ namespace astp {
         *   Task will not start until a call to 
         *   leave will be done.
         */
-        template<class F> inline ThreadPool&
-        dispatch_group_insert(const std::string id, const F &f) noexcept {
+        template<class F> inline void
+        dispatch_group_insert(const std::string &id, const F &f) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
-            for (std::map<std::string, DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
-                if (it->first == id) { it->second.insert(f); break; }
-            }
-            return *this;
+            std::map<std::string, DispatchGroup>::iterator it;
+            it = _groups.find(id);
+            if (it == _groups.end()) return;
+            it->second.insert(f);
         }
         /**
         *   Signal to a group that the jobs immission 
         *   is end, than start pushing the group jobs
         *   to the standard threadpool queue.
         */
-        ThreadPool& 
-        dispatch_group_leave(const std::string id) noexcept {
+        void
+        dispatch_group_leave(const std::string &id) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
-            for (std::map<std::string, DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
-                if (it->first != id) continue;
-                it->second.leave();
-                auto jobs = it->second.jobs();
-                for (auto &j : jobs) { push(j); }
-                break;
-            }
-            return *this;
+            std::map<std::string, DispatchGroup>::iterator it;
+            it = _groups.find(id);
+            if (it == _groups.end()) return;
+            it->second.leave();
+            auto jobs = it->second.jobs();
+            for (auto &j : jobs) { push(j); }
         }
         /**
         *   Wait until every job in a group is computed.
         *   This is a thread blocking call.
         */
-        ThreadPool& 
-        dispatch_group_wait(const std::string id) noexcept {
-            for (std::map<std::string,DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
-                if (it->first != id) continue;
-                while(!it->second.has_finished()) std::chrono::nanoseconds(_thread_sleep_time_ns); 
-                break;
-            }
-            return *this;
+        void
+        dispatch_group_wait(const std::string &id) {
+            std::map<std::string, DispatchGroup>::iterator it;
+            it = _groups.find(id);
+            if (it == _groups.end()) return;
+            while(!it->second.has_finished()) std::chrono::nanoseconds(_thread_sleep_time_ns); 
         }
         /** 
         *   As the normal dispatch_group_wait, but
         *   at the end call the function f.
-        *   Usefull if you want to signal somewhat
+        *   Useful if you want to signal somewhat
         *   at the end of group.
         */
-        template<class F> ThreadPool&  
-        dispatch_group_wait(const std::string id, const F &f) {
+        template<class F> void
+        dispatch_group_wait(const std::string &id, const F &f) noexcept(false) {
             dispatch_group_wait(id); f();
-            return *this;
         }
         /**
-        *   The same as synchronize, but is usefull
+        *   The same as synchronize, but is useful
         *   if you don't want do block all others
         *   jobs in the queue.
         */
-        ThreadPool& 
-        dispatch_group_synchronize(const std::string id) noexcept {
+        void
+        dispatch_group_synchronize(const std::string &id) {
             for (std::map<std::string,DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
                 if (it->first != id) continue;
                 it->second.synchronize();
             }
-            return *this;
         }
         /**/
-        ThreadPool& 
-        dispatch_group_end_synchronize(const std::string id) noexcept {
+        void
+        dispatch_group_end_synchronize(const std::string id) {
             for (std::map<std::string,DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
                 if (it->first != id) continue;
                 it->second.end_synchronize();
             }
-            return *this;
         }
 
     private:
@@ -492,7 +488,6 @@ namespace astp {
         *   detached.
         */
         std::atomic<bool> _run_pool_thread;
-        std::atomic<size_t> _queue_size;
         /** 
         *   Where the running threads lives. 
         */
@@ -516,17 +511,15 @@ namespace astp {
         */
         std::atomic<int> _thread_to_kill_c;
         std::atomic<int> _push_c;
-        std::atomic<int> _comp_c;
         
         /**
         *   Lock the queue mutex for
         *   a safe insertion in the queue.
         */
         template<class F> inline void
-        _safe_queue_push(const F t) {
+        _safe_queue_push(const F &t) {
             std::unique_lock<std::mutex> lock(_mutex_queue);
-            _queue.push(t);
-            _queue_size++;
+            _queue.push(std::move(t));
         }
 
         /**
@@ -539,7 +532,6 @@ namespace astp {
             if (_queue.empty()) return std::function<void()>(); 
             auto t = _queue.front();
             _queue.pop();
-            _queue_size--;
             return t;
         }
 
@@ -578,7 +570,7 @@ namespace astp {
         *   queue is empty. 
         */
         void 
-        _thread_loop_mth() noexcept {
+        _thread_loop_mth()  {
             while(_run_pool_thread) {
                 if (_thread_to_kill_c != 0) break;
                 auto funcf = _safe_queue_pop();
@@ -589,7 +581,7 @@ namespace astp {
                 }
                 try {
                     funcf();
-                    _comp_c++;  
+                    _push_c--;
                 } catch (...) {
                     // TODO
                 }
@@ -597,10 +589,11 @@ namespace astp {
             _thread_to_kill_c--;
         }
 
-    }; // End ThreadPool
+    }; /* End ThreadPool */
 
-}; // Namespace end
+}; /* Namespace end */
 
-#endif // __cplusplus
-#endif // _THREAD_POOL_HPP_
+#endif /* __cplusplus */
+
+#endif /* _THREAD_POOL_HPP_ */
 
