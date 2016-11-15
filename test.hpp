@@ -34,6 +34,8 @@ public:
         set_sleep_time(ThreadPoolTest::random(-100, 1000000000));
         do_job(ThreadPoolTest::random(0, 10000));
         multithreading_access();
+        dispatch_group();
+        dispatch_group_multith();
     }
 
     void
@@ -124,6 +126,51 @@ public:
                 acc_thread[i].join();
             }
             tp.wait();
+        }
+        end_func(start);
+    }
+
+    void
+    dispatch_group() {
+        auto start = start_func(__func__, "noargs");
+        auto tp = ThreadPool();
+        tp.dispatch_group_enter("group1");
+        for (int i = 0; i < 100; i++) {
+            tp.dispatch_group_insert("group1", [i]() { auto a = i * 2; });
+        }
+        tp.dispatch_group_leave("group1");    
+        tp.dispatch_group_wait("group1");
+        end_func(start);
+    }
+
+    void
+    dispatch_group_multith() {
+        auto start = start_func(__func__, "noargs");
+        auto tp = ThreadPool();
+        auto acc_thread = std::vector<std::thread>(3);
+        acc_thread[0] = std::thread([&tp] () {
+            tp.dispatch_group_enter("group1");
+            for (int i = 0; i < 1000; i++) {
+                tp.dispatch_group_insert("group1", [i]() { auto a = i * 2; });
+            }
+        });
+        acc_thread[1] = std::thread([&tp] () {
+            for (int i = 0; i < 1000; i++) {
+                tp.dispatch_group_enter("group1");
+            }
+            tp.dispatch_group_leave("group1");  
+            tp.dispatch_group_wait("group1");
+        });
+        acc_thread[2] = std::thread([&tp] () {
+            tp.dispatch_group_enter("group2");
+            for (int i = 0; i < 100; i++) {
+                tp.dispatch_group_insert("group2", [i]() { auto a = i * 2; });
+            }
+            tp.dispatch_group_leave("group2");    
+            tp.dispatch_group_wait("group2");
+        });
+        for (int i = 0; i < acc_thread.size(); i++) {
+            acc_thread[i].join();
         }
         end_func(start);
     }

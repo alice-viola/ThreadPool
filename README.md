@@ -142,6 +142,20 @@ auto sleep_time = tp.sleep_time_ns();
 tp.synchronize();
 tp.end_synchronize();
 
+
+/**
+*   Dispatch Group Methods
+*
+*   The following are the methods that
+*   you need to call if you want to
+*   do jobs in *groups*.
+*/
+tp.dispatch_group_enter("groupname");
+tp.dispatch_group_insert("groupname", []() { /* task1 */ });
+tp.dispatch_group_insert("groupname", []() { /* task2 */ });
+tp.dispatch_group_leave("groupname");  
+tp.dispatch_group_wait("groupname");
+
 /**
 *	Misc
 *	Callable from every thread.
@@ -204,5 +218,4 @@ write(int i) {
 ```
 
 ## To Do
-I'm working on the exception handling, and on the concept of *group of jobs*, that will 
-make possible to track the state of a group of tasks in the pool queue.
+I'm working on the exception handling.

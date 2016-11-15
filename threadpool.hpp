@@ -41,17 +41,28 @@
 #include <chrono>
 #include <assert.h>
 
-
 namespace astp {
-
     /**
-    *   ThreadPool
+    *    _____ _                        _ ____             _ 
+    *   |_   _| |__  _ __ ___  __ _  __| |  _ \ ___   ___ | |
+    *     | | | '_ \| '__/ _ \/ _` |/ _` | |_) / _ \ / _ \| |
+    *     | | | | | | | |  __/ (_| | (_| |  __/ (_) | (_) | |
+    *     |_| |_| |_|_|  \___|\__,_|\__,_|_|   \___/ \___/|_|
+    *
+    *     BECAUSE POWER IS NOTHING WITHOUT CONTROL                                                          
     */
     class ThreadPool
     {
-    public:
-
+    protected:
         /**
+        *    ____                             _                    
+        *   / ___|  ___ _ __ ___   __ _ _ __ | |__   ___  _ __ ___ 
+        *   \___ \ / _ \ '_ ` _ \ / _` | '_ \| '_ \ / _ \| '__/ _ \
+        *    ___) |  __/ | | | | | (_| | |_) | | | | (_) | | |  __/
+        *   |____/ \___|_| |_| |_|\__,_| .__/|_| |_|\___/|_|  \___|
+        *                      |_|                         
+        *
+        *
         *   Internal ThreadPool class 
         *   that represents a binary semaphore
         *   in order to make the ThreadPool thread safe.
@@ -84,7 +95,89 @@ namespace astp {
             std::atomic<bool> _sem_value;
         };
 
-        
+        /**
+        *    ____  _                 _       _      ____                       
+        *   |  _ \(_)___ _ __   __ _| |_ ___| |__  / ___|_ __ ___  _   _ _ __  
+        *   | | | | / __| '_ \ / _` | __/ __| '_ \| |  _| '__/ _ \| | | | '_ \ 
+        *   | |_| | \__ \ |_) | (_| | || (__| | | | |_| | | | (_) | |_| | |_) |
+        *   |____/|_|___/ .__/ \__,_|\__\___|_| |_|\____|_|  \___/ \__,_| .__/ 
+        *               |_|                                             |_|    
+        *   
+        *
+        *   Internal ThreadPool class 
+        *   that stores informations
+        *   about dispatch groups.
+        */
+        class DispatchGroup
+        {
+        public:
+            DispatchGroup(std::string id) : 
+                _id(id), 
+                _closed(false),
+                _jobs_done_counter(0),
+                _jobs_count_at_leave(0) {};
+            DispatchGroup(const DispatchGroup &DP) :
+                _id(DP.id()), 
+                _closed(DP.is_leave()),
+                _jobs_done_counter(0),
+                _jobs_count_at_leave(0) {};
+            ~DispatchGroup() {};
+
+            inline void 
+            leave() noexcept {
+                _closed = true;
+                _jobs_count_at_leave = _jobs.size();
+            }
+
+            inline bool
+            is_leave() const noexcept { return _closed; }
+
+            template<class F> inline void
+            insert(const F &f) noexcept {
+                if (_closed) return;
+                auto func = [=] () { f(); _signal_end_of_job(); };
+                _jobs.push_back(func);
+            }
+
+            inline std::vector<std::function<void()> > 
+            jobs() noexcept { return _jobs; }
+
+            inline bool
+            has_finished() noexcept {
+                if (_jobs_done_counter == _jobs_count_at_leave && _closed) return true;
+                return false;
+            }
+
+            inline std::string
+            id() const noexcept { return _id; }
+
+            inline int
+            jobs_count() noexcept { return _jobs.size(); }
+
+            inline void
+            synchronize() {
+                _sem_sync.wait();
+            }
+
+            inline void
+            end_synchronize() {
+                _sem_sync.signal();
+            }
+            
+        private:
+            std::string _id;
+            std::vector<std::function<void()> > _jobs;
+            std::atomic<bool> _closed;
+            std::atomic<int> _jobs_count_at_leave;
+            std::atomic<int> _jobs_done_counter;
+            Semaphore _sem_sync;
+
+            inline void
+            _signal_end_of_job() { _jobs_done_counter++; }
+        };
+
+    public:
+
         /**
         *   If *max_threads* is not specified,
         *   the pool size is set to the max number
@@ -177,6 +270,7 @@ namespace astp {
         /**
         *   Stop execution, detach all
         *   jobs under processing.
+        *   This is a thread blocking call.
         */ 
         ThreadPool&
         stop() noexcept {
@@ -195,6 +289,7 @@ namespace astp {
         /**
         *   Wait until all jobs
         *   are computed.
+        *   This is a thread blocking call.
         */
         ThreadPool&
         wait() noexcept {
@@ -230,7 +325,7 @@ namespace astp {
         *   Interval is in nanoseconds.
         */
         ThreadPool&
-        set_sleep_time_ns(int time_ns) noexcept {
+        set_sleep_time_ns(const int time_ns) noexcept {
             _thread_sleep_time_ns = abs(time_ns);
             return *this;
         }
@@ -240,7 +335,7 @@ namespace astp {
         *   Interval is in milliseconds.
         */
         ThreadPool&
-        set_sleep_time_ms(int time_ms) noexcept {
+        set_sleep_time_ms(const int time_ms) noexcept {
             _thread_sleep_time_ns = abs(time_ms * 1000000);
             return *this;
         }
@@ -261,50 +356,168 @@ namespace astp {
             return _thread_sleep_time_ns;
         }
 
+        /**
+        *    ____   ____                           
+        *   |  _ \ / ___|_ __ ___  _   _ _ __  ___ 
+        *   | | | | |  _| '__/ _ \| | | | '_ \/ __|
+        *   | |_| | |_| | | | (_) | |_| | |_) \__ \
+        *   |____/ \____|_|  \___/ \__,_| .__/|___/
+        *                               |_|        
+        *
+        *   Set of functions for command dispatch_group
+        *   operations.
+        *
+        *
+        *   Create a new group with an std::string 
+        *   identifier.
+        */
+        ThreadPool&
+        dispatch_group_enter(const std::string id) noexcept {
+            std::unique_lock<std::mutex> lock(_mutex_groups);
+            std::map<std::string, DispatchGroup>::iterator it;
+            it = _groups.find(id);
+            if (it != _groups.end()) return *this;
+            _groups.insert(std::make_pair(id, DispatchGroup(id)));
+            return *this;
+        }
+        /**
+        *   Insert a job to do in a specific group.
+        *   If the group not exist, nothing is done.
+        *   Task will not start until a call to 
+        *   leave will be done.
+        */
+        template<class F> inline ThreadPool&
+        dispatch_group_insert(const std::string id, const F &f) noexcept {
+            std::unique_lock<std::mutex> lock(_mutex_groups);
+            for (std::map<std::string, DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
+                if (it->first == id) { it->second.insert(f); break; }
+            }
+            return *this;
+        }
+        /**
+        *   Signal to a group that the jobs immission 
+        *   is end, than start pushing the group jobs
+        *   to the standard threadpool queue.
+        */
+        ThreadPool& 
+        dispatch_group_leave(const std::string id) noexcept {
+            std::unique_lock<std::mutex> lock(_mutex_groups);
+            for (std::map<std::string, DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
+                if (it->first != id) continue;
+                it->second.leave();
+                auto jobs = it->second.jobs();
+                for (auto &j : jobs) { push(j); }
+                break;
+            }
+            return *this;
+        }
+        /**
+        *   Wait until every job in a group is computed.
+        *   This is a thread blocking call.
+        */
+        ThreadPool& 
+        dispatch_group_wait(const std::string id) noexcept {
+            for (std::map<std::string,DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
+                if (it->first != id) continue;
+                while(!it->second.has_finished()) std::chrono::nanoseconds(_thread_sleep_time_ns); 
+                break;
+            }
+            return *this;
+        }
+        /** 
+        *   As the normal dispatch_group_wait, but
+        *   at the end call the function f.
+        *   Usefull if you want to signal somewhat
+        *   at the end of group.
+        */
+        template<class F> ThreadPool&  
+        dispatch_group_wait(const std::string id, const F &f) {
+            dispatch_group_wait(id); f();
+            return *this;
+        }
+        /**
+        *   The same as synchronize, but is usefull
+        *   if you don't want do block all others
+        *   jobs in the queue.
+        */
+        ThreadPool& 
+        dispatch_group_synchronize(const std::string id) noexcept {
+            for (std::map<std::string,DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
+                if (it->first != id) continue;
+                it->second.synchronize();
+            }
+            return *this;
+        }
+        /**/
+        ThreadPool& 
+        dispatch_group_end_synchronize(const std::string id) noexcept {
+            for (std::map<std::string,DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
+                if (it->first != id) continue;
+                it->second.end_synchronize();
+            }
+            return *this;
+        }
+
     private:
         /** 
         *   Mutex for queue access. 
         */
         std::mutex _mutex_queue;
-
         /** 
         *   Mutex for pool resize. 
         */
         std::mutex _mutex_pool;
-        
+        /** 
+        *   Mutex for groups access. 
+        */
+        std::mutex _mutex_groups;
         /** 
         *   Semaphore for class thread-safety. 
         */
         Semaphore _sem_api;
-
         /**
         *   Optional semaphore for jobs lambda data
         *   protection in critical sections.
         */
         Semaphore _sem_job_ins_container;
-
         /** 
         *   Time in nanoseconds which threads
         *   that are sleeping check for new
         *   jobs in the queue.
         */
         std::atomic<int> _thread_sleep_time_ns;
-        
         /**
         *   Flag for pool's threads state,
         *   when false, all the threads will be
         *   detached.
         */
         std::atomic<bool> _run_pool_thread;
-
-        std::atomic<int> _max_threads;
         std::atomic<size_t> _queue_size;
+        /** 
+        *   Where the running threads lives. 
+        */
         std::vector<std::thread> _pool;
+        /** 
+        *   Queue of jobs to do.
+        */
         std::queue<std::function<void()> > _queue;
+        /** 
+        *   A map of in process groups of jobs.
+        */
+        std::map<std::string, DispatchGroup> _groups;
+        /** 
+        *   The number of threads currently in the pool.
+        */
+        std::atomic<int> _max_threads;
+        /** 
+        *   Counter used when there are 
+        *   some threads to remove from
+        *   the pool [stop or resize]. 
+        */
         std::atomic<int> _thread_to_kill_c;
         std::atomic<int> _push_c;
         std::atomic<int> _comp_c;
-
+        
         /**
         *   Lock the queue mutex for
         *   a safe insertion in the queue.
