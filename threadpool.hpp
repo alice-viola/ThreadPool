@@ -36,7 +36,7 @@
 #include <vector>
 #include <map>
 #include <string>
-#include <queue>
+#include <deque>
 #include <assert.h>
 #ifdef DEBUG
 #include <iostream>
@@ -240,7 +240,6 @@ namespace astp {
         */
         template<class F> inline ThreadPool&
         push(const F &f) {
-            _push_c++;
             _safe_queue_push(f);
             return *this;
         }
@@ -302,8 +301,9 @@ namespace astp {
         void
         wait() {
             if (!_run_pool_thread) return;
-            while((_push_c != 0)) 
+            while((_push_c != 0)) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
+            }
         }
 
         /**
@@ -398,6 +398,26 @@ namespace astp {
             it->second.insert(f);
         }
         /**
+        *   Create a new group, insert a job on it
+        *   and dispatch it.
+        *   It is guaranteed that this job will be
+        *   the first next job to be processed by
+        *   the threadpool.
+        */
+        template<class F> inline void
+        dispatch_group_now(std::string id, const F &f) {
+            std::unique_lock<std::mutex> lock(_mutex_groups);
+            std::map<std::string, DispatchGroup>::iterator it;
+            it = _groups.find(id);
+            if (it != _groups.end()) return;
+            _groups.insert(std::make_pair(id, std::move(DispatchGroup(id))));
+            it = _groups.find(id);
+            if (it == _groups.end()) return;
+            it->second.insert(f);
+            it->second.leave();
+            _safe_queue_push_front(it->second.jobs()[0]);
+        }
+        /**
         *   Signal to a group that the jobs immission 
         *   is end, than start pushing the group jobs
         *   to the standard threadpool queue.
@@ -422,12 +442,14 @@ namespace astp {
             it = _groups.find(id);
             if (it == _groups.end()) return;
             while(!it->second.has_finished()) std::chrono::nanoseconds(_thread_sleep_time_ns); 
+            // TODO: Remove from map
         }
         /** 
         *   As the normal dispatch_group_wait, but
         *   at the end call the function f.
         *   Useful if you want to signal somewhat
         *   at the end of group.
+        *   This is a thread blocking call.
         */
         template<class F> void
         dispatch_group_wait(const std::string &id, const F &f) noexcept(false) {
@@ -495,7 +517,7 @@ namespace astp {
         /** 
         *   Queue of jobs to do.
         */
-        std::queue<std::function<void()> > _queue;
+        std::deque<std::function<void()> > _queue;
         /** 
         *   A map of in process groups of jobs.
         */
@@ -518,8 +540,22 @@ namespace astp {
         */
         template<class F> inline void
         _safe_queue_push(const F &t) {
+            _push_c++;
             std::unique_lock<std::mutex> lock(_mutex_queue);
-            _queue.push(std::move(t));
+            _queue.push_back(std::move(t));
+        }
+
+        /**
+        *   Lock the queue mutex for
+        *   a safe insertion in the queue.
+        *   Insert the element at end of the 
+        *   queue.
+        */
+        template<class F> inline void
+        _safe_queue_push_front(const F &t) {
+            _push_c++;
+            std::unique_lock<std::mutex> lock(_mutex_queue);
+            _queue.push_front(std::move(t));
         }
 
         /**
@@ -531,7 +567,7 @@ namespace astp {
             std::unique_lock<std::mutex> lock(_mutex_queue);
             if (_queue.empty()) return std::function<void()>(); 
             auto t = _queue.front();
-            _queue.pop();
+            _queue.pop_front();
             return t;
         }
 
