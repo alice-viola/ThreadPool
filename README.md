@@ -73,10 +73,10 @@ auto tp = astp::ThreadPool(0);  // -> Create one thread
 auto tp = astp::ThreadPool(-1); // -> Create one thread
 ```
 ### Resize
-The pool can be resized after it was created: if the resizing operation decrease
+The pool can be resized after it was created: if the resizing operation decreases
 the current number of threads, a number equal to the difference is popped from 
 the pool, but only when the threads have finished to compute their workload.
-At least one thread is keep in the pool.
+At least one thread is kept in the pool.
 During the resizing, the stop of the pool is blocked.
 ```C++
 // For instace, current pool size is 64.
@@ -115,7 +115,7 @@ executed when it will be at the front of the queue.
 See the next section for how to wait the execution of the task.
 
 ### Waiting execution
-When the task are inserted in the pool, you cannot know when
+When the tasks are inserted in the pool, you cannot know when
 they will be completed. If you need to know when they are completed,
 you can wait the execution of all the tasks with the following method.
 This will wait, blocking the caller thread, until all the tasks have finished
@@ -228,7 +228,7 @@ auto stns = tp.sleep_time_ns();
 ```
 
 ### Misc
-Varius methods in order to get information
+Various methods in order to get information
 about the state of the threadpool.
 ```C++
 auto current_pool_size = tp.pool_size();
@@ -260,3 +260,7 @@ write(int i) {
 
 ## To Do
 I'm working on the exception handling.
+
+## License
+ThreadPool is released under the MIT license.
+See the file *LICENSE.txt* for the license text.
