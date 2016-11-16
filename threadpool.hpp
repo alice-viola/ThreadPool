@@ -189,7 +189,7 @@ namespace astp {
         *   At least one thread is created.
         */
         ThreadPool(int max_threads = std::thread::hardware_concurrency()) : 
-            _max_threads(0),
+            _threads_count(0),
             _thread_to_kill_c(),
             _thread_sleep_time_ns(1000),
             _run_pool_thread(true),
@@ -224,8 +224,8 @@ namespace astp {
         resize(int num_threads = std::thread::hardware_concurrency()) {
             _sem_api.wait();
             if (num_threads < 1) { num_threads = 1; }
-            int diff = abs(num_threads - (int)_max_threads);
-            if (num_threads > _max_threads) {
+            int diff = abs(num_threads - (int)_threads_count);
+            if (num_threads > _threads_count) {
                 for (int i = 0; i < diff; i++) _safe_thread_push();
             } else {
                 for (int i = 0; i < diff; i++) _safe_thread_pop();
@@ -286,7 +286,7 @@ namespace astp {
             if (!_run_pool_thread) return;
             _sem_api.wait();
             _run_pool_thread = false;
-            while(_max_threads != 0) _safe_thread_pop();
+            while(_threads_count != 0) _safe_thread_pop();
             while(_thread_to_kill_c != 0) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
             }
@@ -312,7 +312,7 @@ namespace astp {
         */
         int 
         pool_size() { 
-            return _max_threads; 
+            return _threads_count; 
         }
 
         size_t
@@ -525,13 +525,18 @@ namespace astp {
         /** 
         *   The number of threads currently in the pool.
         */
-        std::atomic<int> _max_threads;
+        std::atomic<int> _threads_count;
         /** 
         *   Counter used when there are 
         *   some threads to remove from
         *   the pool [stop or resize]. 
         */
         std::atomic<int> _thread_to_kill_c;
+        /** 
+        *   Stores the id's of the thread
+        *   the will be killed.
+        */
+        std::vector<std::thread::id> _threads_to_kill_id;
         std::atomic<int> _push_c;
         
         /**
@@ -579,7 +584,7 @@ namespace astp {
         inline void 
         _safe_thread_push() {
             _pool.push_back(std::thread(&ThreadPool::_thread_loop_mth, this));
-            _max_threads++;
+            _threads_count++;
         }
 
         /**
@@ -592,9 +597,22 @@ namespace astp {
             std::unique_lock<std::mutex> lock(_mutex_pool);
             if (_pool.empty()) return; 
             _thread_to_kill_c++;
+            _threads_to_kill_id.push_back(_pool.back().get_id());
             _pool.back().detach();
             _pool.pop_back();
-            _max_threads--;
+            _threads_count--;
+        }
+
+        bool
+        _is_to_kill(std::thread::id id) {
+            std::unique_lock<std::mutex> lock(_mutex_pool);
+            for (auto &t : _threads_to_kill_id) {
+                if (t != id) { continue; }
+                _threads_to_kill_id.erase(_threads_to_kill_id.begin() + 
+                    (std::addressof(t) - std::addressof(_threads_to_kill_id[0])) );
+                return true;
+            }
+            return false;
         }
 
         /**
@@ -608,7 +626,9 @@ namespace astp {
         void 
         _thread_loop_mth()  {
             while(_run_pool_thread) {
-                if (_thread_to_kill_c != 0) break;
+                if (_thread_to_kill_c != 0) {
+                    if (_is_to_kill(std::this_thread::get_id())) break;
+                }
                 auto funcf = _safe_queue_pop();
                 if (!funcf) { 
                     if (_thread_sleep_time_ns != 0) 
