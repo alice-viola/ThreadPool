@@ -34,6 +34,7 @@ public:
         set_sleep_time(ThreadPoolTest::random(-100, 1000000000));
         do_job(ThreadPoolTest::random(0, 10000));
         multithreading_access();
+        multithreading_access_push();
         dispatch_group();
         dispatch_group_multith();
     }
@@ -112,15 +113,38 @@ public:
         auto start = start_func(__func__, "noargs");
         auto tp = ThreadPool();
         auto acc_thread = std::vector<std::thread>(3);
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 10; i++) {
             acc_thread[0] = std::thread([&tp] () {
-                tp.resize(ThreadPoolTest::random(1, 1000));  
+                tp.resize(ThreadPoolTest::random(1, 100));  
             });
             acc_thread[1] = std::thread([&tp] () {
-                tp.resize(ThreadPoolTest::random(1, 1000)); 
+                tp.resize(ThreadPoolTest::random(1, 10)); 
             });
             acc_thread[2] = std::thread([&tp] () {
                 tp.wait(); 
+            });
+            for (int i = 0; i < acc_thread.size(); i++) {
+                acc_thread[i].join();
+            }
+            tp.wait();
+        }
+        end_func(start);
+    }
+
+    void
+    multithreading_access_push() {
+        auto start = start_func(__func__, "noargs");
+        auto tp = ThreadPool();
+        auto acc_thread = std::vector<std::thread>(3);
+        for (int i = 0; i < 2000; i++) {
+            acc_thread[0] = std::thread([&tp] () {
+                tp.push([](){ThreadPoolTest::random(1, 1000);});  
+            });
+            acc_thread[1] = std::thread([&tp] () {
+                tp.push([](){ThreadPoolTest::random(1, 1000);}); 
+            });
+            acc_thread[2] = std::thread([&tp] () {
+                tp.push([](){}); 
             });
             for (int i = 0; i < acc_thread.size(); i++) {
                 acc_thread[i].join();

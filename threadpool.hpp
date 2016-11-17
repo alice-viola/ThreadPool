@@ -34,12 +34,22 @@
 #include <condition_variable>
 #include <functional>
 #include <vector>
+#include <stack>
 #include <map>
 #include <string>
 #include <deque>
 #include <assert.h>
+#include <exception>
+#include <stdexcept>
 #ifdef DEBUG
 #include <iostream>
+#endif
+
+#define EXP_PD_STUFF
+#ifndef EXP_PD_STUFF
+#define EXP_PD_STUFF 1 
+#define likely(x)   __builtin_expect((x), 1)
+#define unlikely(x) __builtin_expect((x), 0)
 #endif
 
 namespace astp {
@@ -193,6 +203,7 @@ namespace astp {
             _thread_to_kill_c(),
             _thread_sleep_time_ns(1000),
             _run_pool_thread(true),
+            _prev_threads(0),
             _push_c(0)
         {
             _sem_api = Semaphore(0);
@@ -224,7 +235,7 @@ namespace astp {
         resize(int num_threads = std::thread::hardware_concurrency()) {
             _sem_api.wait();
             if (num_threads < 1) { num_threads = 1; }
-            int diff = abs(num_threads - (int)_threads_count);
+            int diff = abs(num_threads - _threads_count);
             if (num_threads > _threads_count) {
                 for (int i = 0; i < diff; i++) _safe_thread_push();
             } else {
@@ -234,12 +245,30 @@ namespace astp {
         }
 
         /**
+        *   Insert and execute a task for a
+        *   count number of times, and wait until
+        *   execution is done.
+        */
+        template<class F> inline ThreadPool&
+        apply_for(int count, F&& f) {
+            std::atomic<int> counter;
+            auto func = [&] () { f(); counter++; };
+            std::unique_lock<std::mutex> lock(_mutex_queue);
+            for (int i = 0; i < count; i++) _unsafe_queue_push_front(func);
+            lock.unlock();
+            while (counter != count) {
+                std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
+            }
+            return *this;
+        }
+
+        /**
         *   Push a job to do in jobs queue.
         *   Use lambda expressions in order to
         *   load jobs.
         */
         template<class F> inline ThreadPool&
-        push(const F &f) {
+        push(F&& f) {
             _safe_queue_push(f);
             return *this;
         }
@@ -250,8 +279,8 @@ namespace astp {
         *   load jobs. Overload operator <<.
         */
         template<class F> inline ThreadPool&
-        operator<<(const F &f) {
-            push(f);
+        operator<<(F&& f) {
+            _safe_queue_push(f);
             return *this;
         } 
 
@@ -261,8 +290,9 @@ namespace astp {
         *   load jobs.
         */
         template<class F, class ...Args> inline ThreadPool&
-        push(const F &f, Args... args) {
-            push(f).push(args...);
+        push(const F&& f, Args... args) {
+            _safe_queue_push(f);
+            _safe_queue_push(args...);
             return *this;
         }
 
@@ -276,6 +306,13 @@ namespace astp {
             _sem_job_ins_container.signal();
         }
 
+        void
+        awake() {
+            if (_run_pool_thread) return;
+            _run_pool_thread = true;
+            resize(_prev_threads);
+        }
+
         /**
         *   Stop execution, detach all
         *   jobs under processing.
@@ -286,7 +323,11 @@ namespace astp {
             if (!_run_pool_thread) return;
             _sem_api.wait();
             _run_pool_thread = false;
-            while(_threads_count != 0) _safe_thread_pop();
+            _prev_threads = 0;
+            while(_threads_count != 0) {
+                _prev_threads++;
+                _safe_thread_pop();
+            }
             while(_thread_to_kill_c != 0) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
             }
@@ -351,13 +392,26 @@ namespace astp {
         *   and can be a floating point value.
         */
         template<class F> void
-        set_sleep_time_s(F time_s) {
+        set_sleep_time_s(const F time_s) {
             _thread_sleep_time_ns = abs(static_cast<int>(time_s * 1000000000));
         }
 
         int 
         sleep_time_ns() {
             return _thread_sleep_time_ns;
+        }
+
+        /**
+        *   TODO
+        */
+        void
+        pop_exception() {
+            assert(false);
+            std::unique_lock<std::mutex> lock(_mutex_exceptions);
+            if (_exceptions.empty()) return;
+            auto e = _exceptions.top();
+            _exceptions.pop();
+            std::rethrow_exception(e);
         }
 
         /**
@@ -390,7 +444,7 @@ namespace astp {
         *   leave will be done.
         */
         template<class F> inline void
-        dispatch_group_insert(const std::string &id, const F &f) {
+        dispatch_group_insert(const std::string &id, F&& f) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
             it = _groups.find(id);
@@ -405,14 +459,13 @@ namespace astp {
         *   the threadpool.
         */
         template<class F> inline void
-        dispatch_group_now(std::string id, const F &f) {
+        dispatch_group_now(std::string id, F&& f) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
             it = _groups.find(id);
             if (it != _groups.end()) return;
             _groups.insert(std::make_pair(id, std::move(DispatchGroup(id))));
             it = _groups.find(id);
-            if (it == _groups.end()) return;
             it->second.insert(f);
             it->second.leave();
             _safe_queue_push_front(it->second.jobs()[0]);
@@ -442,7 +495,7 @@ namespace astp {
             it = _groups.find(id);
             if (it == _groups.end()) return;
             while(!it->second.has_finished()) std::chrono::nanoseconds(_thread_sleep_time_ns); 
-            // TODO: Remove from map
+            _groups.erase(it);
         }
         /** 
         *   As the normal dispatch_group_wait, but
@@ -453,7 +506,12 @@ namespace astp {
         */
         template<class F> void
         dispatch_group_wait(const std::string &id, const F &f) noexcept(false) {
-            dispatch_group_wait(id); f();
+            dispatch_group_wait(id); 
+            try {
+                f();    
+            } catch (...) {
+                throw;
+            }
         }
         /**
         *   The same as synchronize, but is useful
@@ -477,6 +535,7 @@ namespace astp {
         }
 
     private:
+        std::mutex _mutex_exceptions;
         /** 
         *   Mutex for queue access. 
         */
@@ -538,13 +597,14 @@ namespace astp {
         */
         std::vector<std::thread::id> _threads_to_kill_id;
         std::atomic<int> _push_c;
+        std::atomic<int> _prev_threads;
         
         /**
         *   Lock the queue mutex for
         *   a safe insertion in the queue.
         */
         template<class F> inline void
-        _safe_queue_push(const F &t) {
+        _safe_queue_push(F&& t) {
             _push_c++;
             std::unique_lock<std::mutex> lock(_mutex_queue);
             _queue.push_back(std::move(t));
@@ -557,9 +617,15 @@ namespace astp {
         *   queue.
         */
         template<class F> inline void
-        _safe_queue_push_front(const F &t) {
+        _safe_queue_push_front(F&& t) {
             _push_c++;
             std::unique_lock<std::mutex> lock(_mutex_queue);
+            _queue.push_front(std::move(t));
+        }
+
+        template<class F> inline void
+        _unsafe_queue_push_front(F&& t) {
+            _push_c++;
             _queue.push_front(std::move(t));
         }
 
@@ -604,7 +670,7 @@ namespace astp {
         }
 
         bool
-        _is_to_kill(std::thread::id id) {
+        _thread_is_to_kill(std::thread::id id) {
             std::unique_lock<std::mutex> lock(_mutex_pool);
             for (auto &t : _threads_to_kill_id) {
                 if (t != id) { continue; }
@@ -615,6 +681,8 @@ namespace astp {
             return false;
         }
 
+        std::stack<std::exception_ptr> _exceptions;
+        
         /**
         *   Each thread start run this function
         *   when the thread is created, and 
@@ -627,20 +695,21 @@ namespace astp {
         _thread_loop_mth()  {
             while(_run_pool_thread) {
                 if (_thread_to_kill_c != 0) {
-                    if (_is_to_kill(std::this_thread::get_id())) break;
+                    if (_thread_is_to_kill(std::this_thread::get_id())) break;
                 }
                 auto funcf = _safe_queue_pop();
-                if (!funcf) { 
+                if (!funcf) {
                     if (_thread_sleep_time_ns != 0) 
-                        std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
+                        std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));                    
                     continue; 
                 }
                 try {
                     funcf();
-                    _push_c--;
                 } catch (...) {
-                    // TODO
+                    std::unique_lock<std::mutex> lock(_mutex_exceptions);
+                    _exceptions.push(std::current_exception());
                 }
+                _push_c--;
             }
             _thread_to_kill_c--;
         }

@@ -134,6 +134,26 @@ is blocked.
 tp.stop();
 ```
 
+### Apply [a.k.a how to run stuff FAST]
+This method allow you to run a repetitive task a lot faster than
+the above methods: 
+*apply_for* let you specify a task and a number of times that this
+task must be executed, and return only when the entire task is finished.
+The tasks inserted with this method have the max priority, and are
+inserted in the front of the queue [That is a std::dequeue, indeed]. 
+Furthermore, the mutex that controls the queue access is acquired only one,
+than all tasks are inserted in the queue; this saves the lock/unlock time.
+```C++
+auto vec = std::vector<int>(600);
+int i = 0;
+tp.apply_for(600, [&vec, &i]() {
+    vec[i] = doStuff();
+    i++;
+});
+// Return only when all the iterations
+// will be executed.
+```
+
 ### Dispatch Groups
 You may have the need of track a series of jobs, so
 the thread pool has some methods to accomplish that.
@@ -214,7 +234,8 @@ This is a consuming process, so you can set the sleep time for threads
 when there aren't jobs to do, so the threads in the pool will go to sleep.
 An higher value of sleep makes the pool less responsive when new jobs are
 inserted, so in case of performance critical tasks, you should set this
-interval small.
+interval small. 
+**Seems that the minimal interval is or zero, or a time-slice of the scheduler**
 ```C++
 // Set sleep in nanoseconds
 tp.set_sleep_time_ns(100);
@@ -241,7 +262,8 @@ auto is_empty = tp.queue_is_empty();
 This test was a write to text test: write one million of lines
 in a *iterations* number of different text files.
 NT means the sequential version, TP[num] means the number of
-threads in the threadpool.
+threads in the threadpool. Test was executed with the normal
+*push* function.
 
 ![Test performance](images/test.png)
 
