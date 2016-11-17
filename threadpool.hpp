@@ -358,14 +358,12 @@ namespace astp {
 
         size_t
         queue_size() {
-            std::unique_lock<std::mutex> lock(_mutex_queue);
-            return _queue.size();
+            return _push_c;
         }
 
         bool 
         queue_is_empty() {
-            std::unique_lock<std::mutex> lock(_mutex_queue);
-            return _queue.empty();
+            return _push_c == 0;
         }
 
         /**
@@ -520,22 +518,23 @@ namespace astp {
         */
         void
         dispatch_group_synchronize(const std::string &id) {
-            for (std::map<std::string,DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
-                if (it->first != id) continue;
-                it->second.synchronize();
-            }
+            std::unique_lock<std::mutex> lock(_mutex_groups);
+            std::map<std::string, DispatchGroup>::iterator it;
+            it = _groups.find(id);
+            if (it == _groups.end()) return;
+            it->second.synchronize();
         }
         /**/
         void
         dispatch_group_end_synchronize(const std::string id) {
-            for (std::map<std::string,DispatchGroup>::iterator it=_groups.begin(); it!=_groups.end(); ++it) {
-                if (it->first != id) continue;
-                it->second.end_synchronize();
-            }
+            std::unique_lock<std::mutex> lock(_mutex_groups);
+            std::map<std::string, DispatchGroup>::iterator it;
+            it = _groups.find(id);
+            if (it == _groups.end()) return;
+            it->second.end_synchronize();
         }
 
     private:
-        std::mutex _mutex_exceptions;
         /** 
         *   Mutex for queue access. 
         */
@@ -596,9 +595,27 @@ namespace astp {
         *   the will be killed.
         */
         std::vector<std::thread::id> _threads_to_kill_id;
+        /** 
+        *   When zero means that all the task
+        *   were executed and no one is 
+        *   waiting.
+        */
         std::atomic<int> _push_c;
+        /**
+        *   Number of threads that the pool had
+        *   when a stop() was called. Used
+        *   by the awake() method to restore the 
+        *   same number of threads.
+        */
         std::atomic<int> _prev_threads;
-        
+        /**
+        *   Under develop.
+        *   Should be the stack of the exceptions
+        *   emitted by the tasks.
+        */
+        std::stack<std::exception_ptr> _exceptions;
+        std::mutex _mutex_exceptions;
+
         /**
         *   Lock the queue mutex for
         *   a safe insertion in the queue.
@@ -623,6 +640,11 @@ namespace astp {
             _queue.push_front(std::move(t));
         }
 
+        /**
+        *   Modify the queue in UNSAFE 
+        *   manner, so you should lock
+        *   the queue outside this function.
+        */
         template<class F> inline void
         _unsafe_queue_push_front(F&& t) {
             _push_c++;
@@ -669,6 +691,12 @@ namespace astp {
             _threads_count--;
         }
 
+        /**
+        *   Called by each thread in the pool
+        *   when _thread_to_kill_c != 0.
+        *   Than the thread will know if must 
+        *   exit from the loop.
+        */
         bool
         _thread_is_to_kill(std::thread::id id) {
             std::unique_lock<std::mutex> lock(_mutex_pool);
@@ -681,8 +709,6 @@ namespace astp {
             return false;
         }
 
-        std::stack<std::exception_ptr> _exceptions;
-        
         /**
         *   Each thread start run this function
         *   when the thread is created, and 

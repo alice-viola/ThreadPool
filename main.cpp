@@ -1,9 +1,10 @@
-#include "threadpool.hpp"
 #include "test.hpp"
 
 int 
 main() {
-    auto tp = ThreadPool();
+    auto tpp = ThreadPoolTest();
+    tpp.exc_all();
+    auto tp = ThreadPool(64);
     auto vec = std::vector<int>(600);
     int i = 0;
     tp.apply_for(600, [&vec, &i]() {

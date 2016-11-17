@@ -114,6 +114,14 @@ When you push a task, the task is inserted in queue, and it will be
 executed when it will be at the front of the queue. 
 See the next section for how to wait the execution of the task.
 
+You can also pass directly a function, but this function must *return void*
+and have *no arguments*.
+
+```C++
+void func() { /* Do stuff */ }
+tp.push(func);
+```
+
 ### Waiting execution
 When the tasks are inserted in the pool, you cannot know when
 they will be completed. If you need to know when they are completed,
@@ -134,13 +142,22 @@ is blocked.
 tp.stop();
 ```
 
-### Apply [a.k.a how to run stuff FAST]
+### Awake the pool
+After that the *stop* method is called, the pool has zero threads,
+so new tasks will not be executed.
+So you need to call the *awake* method: the pool will be resized to the same number
+of threads that the pool had before stopping.
+```C++
+tp.awake();
+```
+
+### Apply [a.k.a how to run stuff FASTER]
 This method allow you to run a repetitive task a lot faster than
 the above methods: 
 *apply_for* let you specify a task and a number of times that this
 task must be executed, and return only when the entire task is finished.
 The tasks inserted with this method have the max priority, and are
-inserted in the front of the queue [That is a std::dequeue, indeed]. 
+inserted in the front of the queue [That is a std::deque, indeed]. 
 Furthermore, the mutex that controls the queue access is acquired only one,
 than all tasks are inserted in the queue; this saves the lock/unlock time.
 ```C++
@@ -153,6 +170,9 @@ tp.apply_for(600, [&vec, &i]() {
 // Return only when all the iterations
 // will be executed.
 ```
+When in a private project I have replaced the standard *push* with the 
+*apply_for*, I've had a 10% performance boost.
+
 
 ### Dispatch Groups
 You may have the need of track a series of jobs, so
@@ -175,6 +195,7 @@ tp.dispatch_group_leave("group_id");
 tp.dispatch_group_wait("group_id");
 // Wait the end of execution [if needed], 
 // and fire a callback when all tasks in the group were ran.
+// Can throw.
 tp.dispatch_group_wait("group_id", []() { /* Fired when the group has been entirely computed */ });
 // Synchronize access to external container
 tp.dispatch_group_synchronize("group_id");
@@ -235,7 +256,7 @@ when there aren't jobs to do, so the threads in the pool will go to sleep.
 An higher value of sleep makes the pool less responsive when new jobs are
 inserted, so in case of performance critical tasks, you should set this
 interval small. 
-**Seems that the minimal interval is or zero, or a time-slice of the scheduler**
+*Seems that the minimal interval is or zero, or a time-slice of the scheduler.*
 ```C++
 // Set sleep in nanoseconds
 tp.set_sleep_time_ns(100);
