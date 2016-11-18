@@ -13,8 +13,8 @@ Features:
 * Thread safe [under testing]
 * Single header [threadpool.hpp]
 
-The ThreadPool is tested under macOS Sierra 10.12 (Apple LLVM version 7.2.0 (clang-702.0.25)) 
-and LinuxMint 17.1 Rebecca (g++ 4.8.2).
+The ThreadPool is tested under macOS Sierra 10.12 (Apple LLVM version 7.2.0 (clang-702.0.25)), 
+LinuxMint 17.1 Rebecca (g++ 4.8.2), Apple iOS 9.3 (XCode 8.0, LLVM version 8.0). 
 
 ## Compile
 You can run some example called in the provided main.cpp file
@@ -33,32 +33,19 @@ g++ -std=c++11 -O3 -pthread main.cpp
 
 The -O3 optimization parameter is obviously optional.
 
-## Usage example 
+## First contact
 ```C++
+#include "threadpool.hpp"
+#include <iostream>
+
 using namespace astp;
-/**
-*	Create a pool with the default 
-*	architecture dependent number
-* 	of threads.
-*/
+
 ThreadPool tp = ThreadPool(); 
 for (int i = 0; i < 100; i++) {
-	/**
-	*	Push load in the pool queue 
-	*	via lambda.
-	*/
-    tp.push([]() {
-        std::vector<int> vec;
-        for (int k = 0; k < 1000; k++) {
-            vec.push_back(k);
-            std::cout << vec.size() << std::endl;
-        }
+    tp.push([i]() {
+        std::cout << "ThreadPool " << i << std::endl; 
     });
 }
-/**
-*	Wait until all jobs are done.
-*	Not mandatory, is up to you.
-*/
 tp.wait();
 ```
 ## API
@@ -170,8 +157,8 @@ tp.apply_for(600, [&vec, &i]() {
 // Return only when all the iterations
 // will be executed.
 ```
-When in a private project I have replaced the standard *push* with the 
-*apply_for*, I've had a 10% performance boost.
+I have experimented a performance boost from 10% to 300% using this method instead
+of the classical push.
 
 ### Future from push
 For task insertion, you may like to get a future reference to the pushed 

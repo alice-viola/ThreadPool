@@ -45,12 +45,6 @@
 #include <iostream>
 #endif
 
-#define EXP_PD_STUFF
-#ifndef EXP_PD_STUFF
-#define EXP_PD_STUFF 1 
-#define likely(x)   __builtin_expect((x), 1)
-#define unlikely(x) __builtin_expect((x), 0)
-#endif
 
 namespace astp {
     /**
