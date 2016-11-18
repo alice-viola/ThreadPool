@@ -276,7 +276,24 @@ auto current_pool_size = tp.pool_size();
 auto current_queue_size = tp.queue_size(); 
 auto is_empty = tp.queue_is_empty();
 ```
+### Excpetion handling [Under development]
+You can set a callback the will be callled every time
+one of pool threads fire an excpetion:
 
+```C++
+std::function<void(std::string)> efunc = [](std::string e) { 
+    std::cout << "Caught exception " << e << std::endl;
+};
+tp.set_excpetion_action(efunc);
+i = 26;
+tp << [i](){ throw std::to_string(i); };
+// -> Caught exception 26
+```
+
+If you don't set a callback the threadpool will fire the 
+default one, that does nothing.
+You can override this behaviour **[at your risk]** declaring the follow
+macro: `#define TP_ENABLE_DEFAULT_EXCEPTION_CALL 0`
 
 ## Performance
 This test was a write to text test: write one million of lines
@@ -285,7 +302,7 @@ NT means the sequential version, TP[num] means the number of
 threads in the threadpool. Test was executed with the normal
 *push* function.
 
-![Test performance](images/test.png)
+![Test performance](images/test2.png)
 
 
 Test function:

@@ -34,7 +34,6 @@
 #include <condition_variable>
 #include <functional>
 #include <vector>
-#include <stack>
 #include <map>
 #include <string>
 #include <deque>
@@ -45,6 +44,9 @@
 #include <iostream>
 #endif
 
+#ifndef TP_ENABLE_DEFAULT_EXCEPTION_CALL
+#define TP_ENABLE_DEFAULT_EXCEPTION_CALL 1
+#endif
 
 namespace astp {
     /**
@@ -202,6 +204,9 @@ namespace astp {
         {
             _sem_api = Semaphore(0);
             _sem_job_ins_container = Semaphore(0);
+            #if TP_ENABLE_DEFAULT_EXCEPTION_CALL
+            _exception_action = [](std::exception_ptr e) {};
+            #endif
             resize(max_threads < 1 ? 1 : max_threads);
         }; 
 
@@ -411,19 +416,6 @@ namespace astp {
         }
 
         /**
-        *   TODO
-        */
-        void
-        pop_exception() {
-            assert(false);
-            std::unique_lock<std::mutex> lock(_mutex_exceptions);
-            if (_exceptions.empty()) return;
-            auto e = _exceptions.top();
-            _exceptions.pop();
-            std::rethrow_exception(e);
-        }
-
-        /**
         *    ____   ____                           
         *   |  _ \ / ___|_ __ ___  _   _ _ __  ___ 
         *   | | | | |  _| '__/ _ \| | | | '_ \/ __|
@@ -545,6 +537,25 @@ namespace astp {
             it->second.end_synchronize();
         }
 
+        /**
+        *   Set a callback for excpetion handling.
+        *   If not setted, threadpool has a default
+        *   callback, that does nothing and not
+        *   rethrow.
+        */
+        template<class F> void
+        set_excpetion_action(std::function<void(F)> f) {
+            _sem_api.wait();
+            auto func = [&f] (std::exception_ptr excp) {
+                try {
+                    std::rethrow_exception(excp);
+                } catch(F e) {
+                    f(e);
+                }};
+            _exception_action = func;
+            _sem_api.signal();
+        }
+
     private:
         /** 
         *   Mutex for queue access. 
@@ -620,12 +631,15 @@ namespace astp {
         */
         std::atomic<int> _prev_threads;
         /**
-        *   Under develop.
-        *   Should be the stack of the exceptions
-        *   emitted by the tasks.
+        *   Callback for excpetion handling setted by the user.
         */
-        std::stack<std::exception_ptr> _exceptions;
+        std::function<void(std::exception_ptr)> _exception_action; 
         std::mutex _mutex_exceptions;
+
+        template<class F> void
+        _exc_exception_action(F excpetion)  {
+            _exception_action(excpetion);
+        }
 
         /**
         *   Lock the queue mutex for
@@ -750,7 +764,7 @@ namespace astp {
                     funcf();
                 } catch (...) {
                     std::unique_lock<std::mutex> lock(_mutex_exceptions);
-                    _exceptions.push(std::current_exception());
+                    _exc_exception_action(std::current_exception());
                 }
                 _push_c--;
             }

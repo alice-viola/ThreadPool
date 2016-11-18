@@ -2,7 +2,19 @@
 
 int 
 main() {
-    auto tp = ThreadPool(64);
+    auto t = ThreadPoolTest();
+    t.exc_all();
+    
+    auto tp = ThreadPool();
+    std::function<void(std::string)> efunc = [](std::string e) { 
+        std::cout << "Caught exception " << e << std::endl;
+    };
+    tp.set_excpetion_action(efunc);
+    for (int i = 0; i < 10; i++) {
+        tp << [i](){ throw std::to_string(i); };
+    }
+    tp.wait();
+    
     auto val = tp.future_from_push([]() -> int {
         int counter = 1;
         for (int i = 1; i < 100000; i++) {
