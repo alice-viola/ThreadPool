@@ -233,6 +233,7 @@ namespace astp {
         */
         void
         resize(int num_threads = std::thread::hardware_concurrency()) {
+            if (!_run_pool_thread) return;
             _sem_api.wait();
             if (num_threads < 1) { num_threads = 1; }
             int diff = abs(num_threads - _threads_count);
@@ -267,7 +268,7 @@ namespace astp {
         */
         template<class F> inline ThreadPool&
         apply_for(int count, F&& f) {
-            std::atomic<int> counter;
+            std::atomic<int> counter(0); 
             auto func = [&] () { f(); counter++; };
             std::unique_lock<std::mutex> lock(_mutex_queue);
             for (int i = 0; i < count; i++) _unsafe_queue_push_front(func);
