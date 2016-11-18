@@ -307,8 +307,10 @@ namespace astp {
         */
         template<class F, class ...Args> inline ThreadPool&
         push(const F&& f, Args... args) {
-            _safe_queue_push(f);
-            _safe_queue_push(args...);
+            std::unique_lock<std::mutex> lock(_mutex_queue);
+            _unsafe_queue_push(f);
+            _unsafe_queue_push(args...);
+            lock.unlock();
             return *this;
         }
 

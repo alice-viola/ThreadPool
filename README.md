@@ -144,7 +144,7 @@ the above methods:
 *apply_for* let you specify a task and a number of times that this
 task must be executed, and return only when the entire task is finished.
 The tasks inserted with this method have the max priority, and are
-inserted in the front of the queue [That is a std::deque, indeed]. 
+inserted in the front of the queue [That is actually a std::deque]. 
 Furthermore, the mutex that controls the queue access is acquired only once,
 than all tasks are inserted in the queue; this saves the lock/unlock time.
 ```C++
