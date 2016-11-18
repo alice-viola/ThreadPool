@@ -158,7 +158,7 @@ the above methods:
 task must be executed, and return only when the entire task is finished.
 The tasks inserted with this method have the max priority, and are
 inserted in the front of the queue [That is a std::deque, indeed]. 
-Furthermore, the mutex that controls the queue access is acquired only one,
+Furthermore, the mutex that controls the queue access is acquired only once,
 than all tasks are inserted in the queue; this saves the lock/unlock time.
 ```C++
 auto vec = std::vector<int>(600);
@@ -173,6 +173,18 @@ tp.apply_for(600, [&vec, &i]() {
 When in a private project I have replaced the standard *push* with the 
 *apply_for*, I've had a 10% performance boost.
 
+### Future from push
+For task insertion, you may like to get a future reference to the pushed 
+job. This feature was inspired by vit-vit threadpool.  
+
+```C++
+auto future_value = tp.future_from_push([]() -> std::string {
+    return "Hello world!";
+});
+future_value.wait();
+auto value = future_value.get();
+std::cout << value << std::endl // --> Hello world!
+```
 
 ### Dispatch Groups
 You may have the need of track a series of jobs, so

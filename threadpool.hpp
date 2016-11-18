@@ -27,7 +27,7 @@
 #ifndef _THREAD_POOL_HPP_
 #define _THREAD_POOL_HPP_
 #ifdef __cplusplus
-
+#include <future>
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -242,6 +242,22 @@ namespace astp {
                 for (int i = 0; i < diff; i++) _safe_thread_pop();
             }
             _sem_api.signal();
+        }
+
+        /**
+        *   Push a job in the queue and
+        *   return a future, so you can 
+        *   track and get the result of the lambda.
+        *
+        *   Inspired by vit-vit threadpool:
+        *   https://github.com/vit-vit/CTPL
+        */
+        template<class F> inline auto
+        future_from_push(F&& f) -> decltype(std::future<decltype(f())>()) {
+            auto packaged_task_ptr = std::make_shared<std::packaged_task<decltype(f())()>>(f);
+            auto func = std::function<void()>([packaged_task_ptr]() {(*packaged_task_ptr)();});
+            _safe_queue_push(func);
+            return packaged_task_ptr->get_future();
         }
 
         /**
@@ -624,6 +640,12 @@ namespace astp {
         _safe_queue_push(F&& t) {
             _push_c++;
             std::unique_lock<std::mutex> lock(_mutex_queue);
+            _queue.push_back(std::move(t));
+        }
+
+        template<class F> inline void
+        _unsafe_queue_push(F&& t) {
+            _push_c++;
             _queue.push_back(std::move(t));
         }
 
