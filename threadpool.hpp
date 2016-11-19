@@ -82,14 +82,14 @@ namespace astp {
             Semaphore& operator=(Semaphore S) { return *this; }
             ~Semaphore() {};
     
-            inline void
+            void
             wait() {
                 std::unique_lock<std::mutex> lock(_mutex);
                 while(_sem_value != true) _cv.wait(lock);
                 _sem_value = false;
             }
     
-            inline void 
+            void 
             signal() {
                 std::unique_lock<std::mutex> lock(_mutex);
                 _cv.notify_one();
@@ -133,43 +133,43 @@ namespace astp {
 
             ~DispatchGroup() {};
 
-            inline void 
+            void 
             leave()  {
                 _closed = true;
                 _jobs_count_at_leave = _jobs.size();
             }
 
-            inline bool
+            bool
             is_leave() const  { return _closed; }
 
-            template<class F> inline void
+            template<class F> void
             insert(const F &f)  {
                 if (_closed) return;
                 auto func = [=] () { f(); _signal_end_of_job(); };
                 _jobs.push_back(func);
             }
 
-            inline std::vector<std::function<void()> > 
+            std::vector<std::function<void()> > 
             jobs()  { return _jobs; }
 
-            inline bool
+            bool
             has_finished()  {
                 if (_jobs_done_counter == _jobs_count_at_leave && _closed) return true;
                 return false;
             }
 
-            inline std::string
+            std::string
             id() const  { return _id; }
 
-            inline int
+            int
             jobs_count()  { return _jobs.size(); }
 
-            inline void
+            void
             synchronize() {
                 _sem_sync.wait();
             }
 
-            inline void
+            void
             end_synchronize() {
                 _sem_sync.signal();
             }
@@ -182,7 +182,7 @@ namespace astp {
             std::atomic<int> _jobs_done_counter;
             Semaphore _sem_sync;
 
-            inline void
+            void
             _signal_end_of_job() { _jobs_done_counter++; }
         };
 
@@ -234,7 +234,7 @@ namespace astp {
         resize(int num_threads = std::thread::hardware_concurrency()) {
             if (!_run_pool_thread) return;
             _sem_api.wait();
-            if (num_threads < 1) { num_threads = 1; }
+            if (num_threads < 1) num_threads = 1;
             int diff = abs(num_threads - _threads_count);
             if (num_threads > _threads_count) {
                 for (int i = 0; i < diff; i++) _safe_thread_push();
@@ -252,7 +252,7 @@ namespace astp {
         *   Inspired by vit-vit threadpool:
         *   https://github.com/vit-vit/CTPL
         */
-        template<class F> inline auto
+        template<class F> auto
         future_from_push(F&& f) -> decltype(std::future<decltype(f())>()) {
             auto packaged_task_ptr = std::make_shared<std::packaged_task<decltype(f())()>>(f);
             auto func = std::function<void()>([packaged_task_ptr]() {(*packaged_task_ptr)();});
@@ -265,7 +265,7 @@ namespace astp {
         *   count number of times, and wait until
         *   execution is done.
         */
-        template<class F> inline ThreadPool&
+        template<class F> ThreadPool&
         apply_for(int count, F&& f) {
             std::atomic<int> counter(0); 
             auto func = [&] () { f(); counter++; };
@@ -283,7 +283,7 @@ namespace astp {
         *   Use lambda expressions in order to
         *   load jobs.
         */
-        template<class F> inline ThreadPool&
+        template<class F> ThreadPool&
         push(F&& f) {
             _safe_queue_push(f);
             return *this;
@@ -294,7 +294,7 @@ namespace astp {
         *   Use lambda expressions in order to
         *   load jobs. Overload operator <<.
         */
-        template<class F> inline ThreadPool&
+        template<class F> ThreadPool&
         operator<<(F&& f) {
             _safe_queue_push(f);
             return *this;
@@ -305,7 +305,7 @@ namespace astp {
         *   Use lambda expressions in order to
         *   load jobs.
         */
-        template<class F, class ...Args> inline ThreadPool&
+        template<class F, class ...Args> ThreadPool&
         push(const F&& f, Args... args) {
             std::unique_lock<std::mutex> lock(_mutex_queue);
             _unsafe_queue_push(f);
@@ -314,12 +314,12 @@ namespace astp {
             return *this;
         }
 
-        inline void
+        void
         synchronize() {
             _sem_job_ins_container.wait();
         }
 
-        inline void
+        void
         end_synchronize() {
             _sem_job_ins_container.signal();
         }
@@ -446,7 +446,7 @@ namespace astp {
         *   Task will not start until a call to 
         *   leave will be done.
         */
-        template<class F> inline void
+        template<class F> void
         dispatch_group_insert(const std::string &id, F&& f) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
@@ -461,7 +461,7 @@ namespace astp {
         *   the first next job to be processed by
         *   the threadpool.
         */
-        template<class F> inline void
+        template<class F> void
         dispatch_group_now(std::string id, F&& f) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
@@ -639,7 +639,7 @@ namespace astp {
         std::mutex _mutex_exceptions;
 
         template<class F> void
-        _exc_exception_action(F excpetion)  {
+        _exc_exception_action(F excpetion) {
             _exception_action(excpetion);
         }
 
@@ -647,14 +647,14 @@ namespace astp {
         *   Lock the queue mutex for
         *   a safe insertion in the queue.
         */
-        template<class F> inline void
+        template<class F> void
         _safe_queue_push(F&& t) {
             _push_c++;
             std::unique_lock<std::mutex> lock(_mutex_queue);
             _queue.push_back(std::move(t));
         }
 
-        template<class F> inline void
+        template<class F> void
         _unsafe_queue_push(F&& t) {
             _push_c++;
             _queue.push_back(std::move(t));
@@ -666,7 +666,7 @@ namespace astp {
         *   Insert the element at end of the 
         *   queue.
         */
-        template<class F> inline void
+        template<class F> void
         _safe_queue_push_front(F&& t) {
             _push_c++;
             std::unique_lock<std::mutex> lock(_mutex_queue);
@@ -678,7 +678,7 @@ namespace astp {
         *   manner, so you should lock
         *   the queue outside this function.
         */
-        template<class F> inline void
+        template<class F> void
         _unsafe_queue_push_front(F&& t) {
             _push_c++;
             _queue.push_front(std::move(t));
@@ -688,7 +688,7 @@ namespace astp {
         *   Lock the queue mutex, safely pop
         *   job from the queue if not empty.
         */
-        inline std::function<void()>
+        std::function<void()>
         _safe_queue_pop() {
             std::unique_lock<std::mutex> lock(_mutex_queue);
             if (_queue.empty()) return std::function<void()>(); 
@@ -702,9 +702,9 @@ namespace astp {
         *   or the user has required a resize 
         *   operation.
         */
-        inline void 
+        void 
         _safe_thread_push() {
-            _pool.push_back(std::thread(&ThreadPool::_thread_loop_mth, this));
+            _pool.push_back(std::move(std::thread(&ThreadPool::_thread_loop_mth, this)));
             _threads_count++;
         }
 
@@ -713,7 +713,7 @@ namespace astp {
         *   or the user has required both a resize 
         *   operation or a stop operation.
         */
-        inline void 
+        void 
         _safe_thread_pop() {
             std::unique_lock<std::mutex> lock(_mutex_pool);
             if (_pool.empty()) return; 

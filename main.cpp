@@ -15,6 +15,8 @@ main() {
     }
     tp.wait();
     
+    tp.push([](){},[](){});
+
     auto val = tp.future_from_push([]() -> int {
         int counter = 1;
         for (int i = 1; i < 100000; i++) {
