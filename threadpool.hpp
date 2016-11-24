@@ -453,7 +453,7 @@ namespace astp {
         *   Interval is in nanoseconds.
         */
         void
-        set_sleep_time_ns(const int time_ns) {
+        set_sleep_time_ns(const int time_ns) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
             _condition_check("Sleep time value must be greater or equal to zero", 
                 [&](){ return time_ns < 0; });
@@ -466,7 +466,7 @@ namespace astp {
         *   Interval is in milliseconds.
         */
         void
-        set_sleep_time_ms(const int time_ms) {
+        set_sleep_time_ms(const int time_ms) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
             _condition_check("Sleep time value must be greater or equal to zero", 
                 [&](){ return time_ms < 0; });
@@ -480,7 +480,7 @@ namespace astp {
         *   and can be a floating point value.
         */
         template<class F> void
-        set_sleep_time_s(const F time_s) {
+        set_sleep_time_s(const F time_s) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
             _condition_check("Sleep time value must be greater or equal to zero", 
                 [&](){ return time_s < 0; });
@@ -509,7 +509,7 @@ namespace astp {
         *   identifier.
         */
         void
-        dg_open(const std::string& id) {
+        dg_open(const std::string& id) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
             it = _groups.find(id);
@@ -576,7 +576,12 @@ namespace astp {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
             it = _groups.find(id);
-            if (it == _groups.end()) return;
+            #if TP_ENABLE_SANITY_CHECKS
+                _condition_check("The group not exist " + id, 
+                    [&](){ return it == _groups.end(); });
+            #else
+                if (it == _groups.end()) return;  
+            #endif
             it->second.leave(f);
             auto jobs = it->second.jobs();
             for (auto &j : jobs) { push(j); }
@@ -587,11 +592,16 @@ namespace astp {
         *   to the standard threadpool queue.
         */
         void
-        dg_close(const std::string& id) {
+        dg_close(const std::string& id) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
             it = _groups.find(id);
-            if (it == _groups.end()) return;
+            #if TP_ENABLE_SANITY_CHECKS
+                _condition_check("The group not exist " + id, 
+                    [&](){ return it == _groups.end(); });
+            #else
+                if (it == _groups.end()) return;  
+            #endif
             it->second.leave();
             auto jobs = it->second.jobs();
             for (auto &j : jobs) { push(j); }
@@ -601,7 +611,7 @@ namespace astp {
         *   This is a thread blocking call.
         */
         void
-        dg_wait(const std::string &id) {
+        dg_wait(const std::string &id) noexcept(false) {
             std::map<std::string, DispatchGroup>::iterator it;
             it = _groups.find(id);
             if (it == _groups.end()) return;
@@ -646,20 +656,30 @@ namespace astp {
         *   jobs in the queue.
         */
         void
-        dg_synchronize(const std::string &id) {
+        dg_synchronize(const std::string &id) noexcept(false)  {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
             it = _groups.find(id);
-            if (it == _groups.end()) return;
+            #if TP_ENABLE_SANITY_CHECKS
+                _condition_check("The group not exist " + id, 
+                    [&](){ return it == _groups.end(); });
+            #else
+                if (it == _groups.end()) return;  
+            #endif
             it->second.synchronize();
         }
         /**/
         void
-        dg_end_synchronize(const std::string id) {
+        dg_end_synchronize(const std::string id) noexcept(false)  {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
             it = _groups.find(id);
-            if (it == _groups.end()) return;
+            #if TP_ENABLE_SANITY_CHECKS
+                _condition_check("The group not exist " + id, 
+                    [&](){ return it == _groups.end(); });
+            #else
+                if (it == _groups.end()) return;  
+            #endif
             it->second.end_synchronize();
         }
 
@@ -768,7 +788,7 @@ namespace astp {
         }
 
         template<class M, class T> void 
-        _condition_check(M m, T&& t) noexcept(false) {
+        _condition_check(M&& m, T&& t) noexcept(false) {
             if (t()) throw std::runtime_error(m);
         }
 
