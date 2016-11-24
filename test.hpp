@@ -22,12 +22,13 @@ public:
     
     ThreadPoolTest() {
         srand(time(NULL));
+        //functions.push_back()
     };
     ~ThreadPoolTest() {};
 
     void 
     exc_all() {
-        create(ThreadPoolTest::random(-100, 1000));
+        create(ThreadPoolTest::random(-100, 100));
         resize(ThreadPoolTest::random(1, 10));
         push(ThreadPoolTest::random(0, 1000000));
         varidic_push(ThreadPoolTest::random(0, 1000000));
@@ -35,15 +36,19 @@ public:
         do_job(ThreadPoolTest::random(0, 10000));
         multithreading_access();
         multithreading_access_push();
-        dispatch_group();
-        dispatch_group_multith();
+        dg();
+        dg_multith();
     }
 
     void
     create(int n) {
         auto start = start_func(__func__, n);
-        auto tp = ThreadPool(n);
-        assert(tp.pool_size() == abs(n) || tp.pool_size() == 1);
+        try {
+            auto tp = ThreadPool(n);
+            assert(tp.pool_size() == abs(n) || tp.pool_size() == 1);
+        } catch(std::runtime_error e) {
+            std::cout << e.what() << std::endl; 
+        }
         end_func(start);
     } 
 
@@ -70,13 +75,13 @@ public:
 
     void
     varidic_push(int iterations) {
-        auto start = start_func(__func__, iterations);
+        auto start = start_func(__func__, std::to_string(iterations), "ciao");
         auto tp = ThreadPool();
         tp.stop();
         for (int i = 0; i < iterations; i++) {
-            tp.push([i] () { int a = i * 64; }, [i] () { int a = i * 128; } );    
+            tp.push([i] () { int a = i * 64; }, [i] () { int a = i * 128; }, [i] () { int a = i * 256; });    
         }
-        assert(tp.queue_size() == 2 * iterations);
+        assert(tp.queue_size() == 3 * iterations);
         end_func(start);
     }
 
@@ -155,43 +160,43 @@ public:
     }
 
     void
-    dispatch_group() {
+    dg() {
         auto start = start_func(__func__, "noargs");
         auto tp = ThreadPool();
-        tp.dispatch_group_enter("group1");
+        tp.dg_open("group1");
         for (int i = 0; i < 100; i++) {
-            tp.dispatch_group_insert("group1", [i]() { auto a = i * 2; });
+            tp.dg_insert("group1", [i]() { auto a = i * 2; });
         }
-        tp.dispatch_group_leave("group1");    
-        tp.dispatch_group_wait("group1");
+        tp.dg_close("group1");    
+        tp.dg_wait("group1");
         end_func(start);
     }
 
     void
-    dispatch_group_multith() {
+    dg_multith() {
         auto start = start_func(__func__, "noargs");
         auto tp = ThreadPool();
         auto acc_thread = std::vector<std::thread>(3);
         acc_thread[0] = std::thread([&tp] () {
-            tp.dispatch_group_enter("group1");
+            tp.dg_open("group1");
             for (int i = 0; i < 1000; i++) {
-                tp.dispatch_group_insert("group1", [i]() { auto a = i * 2; });
+                tp.dg_insert("group1", [i]() { auto a = i * 2; });
             }
         });
         acc_thread[1] = std::thread([&tp] () {
             for (int i = 0; i < 1000; i++) {
-                tp.dispatch_group_enter("group1");
+                tp.dg_open("group1");
             }
-            tp.dispatch_group_leave("group1");  
-            tp.dispatch_group_wait("group1");
+            tp.dg_close("group1");  
+            tp.dg_wait("group1");
         });
         acc_thread[2] = std::thread([&tp] () {
-            tp.dispatch_group_enter("group2");
+            tp.dg_open("group2");
             for (int i = 0; i < 100; i++) {
-                tp.dispatch_group_insert("group2", [i]() { auto a = i * 2; });
+                tp.dg_insert("group2", [i]() { auto a = i * 2; });
             }
-            tp.dispatch_group_leave("group2");    
-            tp.dispatch_group_wait("group2");
+            tp.dg_close("group2");    
+            tp.dg_wait("group2");
         });
         for (int i = 0; i < acc_thread.size(); i++) {
             acc_thread[i].join();
@@ -207,18 +212,28 @@ public:
 
 private:
 
-    template<class ...Args>
+    std::vector<std::function<void()> > functions;
+
+    template<class T, class ...Args>
     std::pair<std::string, high_resolution_clock::time_point>
-    start_func(std::string test, Args... args) {
+    start_func(std::string test, T first, Args &&... args) {
         std::cout << "\nStart test: " << test << " with args: ";
-        print(args...);
+        print(first, args...);
         std::cout << std::endl;
         return std::make_pair(test, high_resolution_clock::now());
     }
 
-    template<class T> void 
-    print(T p) { 
-        std::cout << p << " ";
+    template<typename T>
+    void print(T v) {
+      std::cout << v;
+    }
+
+    void print() {}
+
+    template<typename T, typename... Args>
+    void print(T first, Args... args) {
+        std::cout << first << " ";
+        print(args...);
     }
 
     void

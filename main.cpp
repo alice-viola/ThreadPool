@@ -1,48 +1,81 @@
-#include "test.hpp"
+#include "threadpool.hpp"
+#include <iostream>
 
-int 
-main() {
-    auto t = ThreadPoolTest();
-    t.exc_all();
-    
+using namespace astp;
+
+void 
+add(int i) {
+    int a = i + 1; 
+}
+
+void
+testfunc() {
+    std::cout << __func__  << std::endl;
+}
+
+void 
+example() {
     auto tp = ThreadPool();
+    tp.set_sleep_time_ns(0);
+
+
+    tp.push([](){
+        std::cout << "ciao" << std::endl;
+    });
+
+    tp.push([](){}, [](){}, [](){}, [](){}, [](){});
+
+    tp << [](){} << [](){} << testfunc;
+
+
+    auto fut = tp.future_from_push([](){ return 66; });
+    fut.wait();
+    std::cout << "Res: " << fut.get() << std::endl;
+
+
+    tp.dg_open("writetest");
+    for (int i = 0; i < 100; i++) {
+        tp.dg_insert("writetest", [i](){ add(i); });
+    }
+    try {
+        tp.dg_open("writetest");
+    } catch(std::runtime_error e) {
+        std::cout << e.what() << std::endl;
+    }
+    tp.dg_open("writetest2");
+    tp.dg_close_with_barrier("writetest", [&](){
+        std::cout << "Write finished, restart" << std::endl;
+        for (int i = 0; i < 100; i++) {
+            tp.dg_insert("writetest2", [i](){ add(i); });
+        }
+        tp.dg_close_with_barrier("writetest2", [](){
+            std::cout << "Write2 finished" << std::endl;
+        });
+    });
+    
+    tp.dg_now("test", []() {
+        std::cout << "I'm executed now!" << std::endl;
+    });
+
+    tp.apply_for(10, [](){
+        std::cout << "Hey!" << std::endl;
+    });
+
+
+    tp.stop();
+    tp.awake();
+
     std::function<void(std::string)> efunc = [](std::string e) { 
         std::cout << "Caught exception " << e << std::endl;
     };
     tp.set_excpetion_action(efunc);
-    for (int i = 0; i < 10; i++) {
-        tp << [i](){ throw std::to_string(i); };
-    }
-    tp.wait();
-    
-    tp.push([](){},[](){});
+    tp << [](){ throw std::to_string(56); };   
+    tp.dg_wait("writetest2");
+}
 
-    auto val = tp.future_from_push([]() -> int {
-        int counter = 1;
-        for (int i = 1; i < 100000; i++) {
-            counter++;
-        }
-        return counter;
-    });
-    auto val2 = tp.future_from_push([]() -> std::string {
-        return "ciao";
-    });
-    val.wait();
-    val2.wait();
-    auto val1 = val.get();
-    auto val22 = val2.get();
-    std::cout <<  val1 << std::endl;
-    std::cout << val22 << std::endl;
-
-    auto vec = std::vector<int>(600);
-    int i = 0;
-    tp.apply_for(600, [&vec, &i]() {
-        vec[i] = i;
-        i++;
-    });
-    for (auto &v : vec) {
-        std::cout << v << std::endl;
-    }
+int 
+main() {
+    example();    
     return 0;
 }
 

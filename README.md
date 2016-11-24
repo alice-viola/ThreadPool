@@ -160,6 +160,17 @@ tp.apply_for(600, [&vec, &i]() {
 I have experimented a performance boost from 10% to 300% using this method instead
 of the classical push.
 
+There is also the async version, that acts like the normal push.
+```C++
+auto vec = std::vector<int>(600);
+int i = 0;
+tp.apply_for_async(600, [&vec, &i]() {
+    vec[i] = doStuff();
+    i++;
+});
+// Returns immediately
+```
+
 ### Future from push
 For task insertion, you may like to get a future reference to the pushed 
 job. This feature was inspired by vit-vit threadpool.  
@@ -184,27 +195,29 @@ When you signal the end of insertion, tasks will be moved
 to the pool queue. Than you can wait until they are computed.
 ```C++
 // Create a group named "group_id"
-tp.dispatch_group_enter("group_id");
+tp.dg_open("group_id");
 // Insert tasks in the group.
-tp.dispatch_group_insert("group_id", []() { /* task1 */ });
-tp.dispatch_group_insert("group_id", []() { /* task2 */ });
-// Singnal the end of task insertion.
-tp.dispatch_group_leave("group_id");  
+tp.dg_insert("group_id", []() { /* task1 */ });
+tp.dg_insert("group_id", []() { /* task2 */ });
+// Signal the end of task insertion.
+tp.dg_close("group_id");  
+// Signal the end of task insertion and add a barrier.
+tp.dg_close_with_barrier("group_id", [](){});  
 // Wait the end of execution [if needed]
-tp.dispatch_group_wait("group_id");
+tp.dg_wait("group_id");
 // Wait the end of execution [if needed], 
 // and fire a callback when all tasks in the group were ran.
 // Can throw.
-tp.dispatch_group_wait("group_id", []() { /* Fired when the group has been entirely computed */ });
+tp.dg_wait("group_id", []() { /* Fired when the group has been entirely computed */ });
 // Synchronize access to external container
-tp.dispatch_group_synchronize("group_id");
-tp.dispatch_group_end_synchronize("group_id");
+tp.dg_synchronize("group_id");
+tp.dg_end_synchronize("group_id");
 ```
 Dispatch group allow the execution of a task with high priority:
-the method *dispatch_group_now* will insert the task directly
+the method *dg_now* will insert the task directly
 at the front of the pool queue.
 ```C++
-tp.dispatch_group_now("group_id", []() { std::cout << "High priority" << std::endl; });
+tp.dg_now("group_id", []() { std::cout << "High priority" << std::endl; });
 ```
 This is useful when you have a lot of tasks in the pool queue and you want
 to process something without waiting the end of all others tasks. 
@@ -233,19 +246,19 @@ for (int i = 0; i < 100; i++) {
 Dispatch group synchronization:
 ```C++
 std::vector<int> data;
-tp.dispatch_group_enter("data_group");
+tp.dg_open("data_group");
 for (int i = 0; i < 100; i++) {
-    tp.dispatch_group_insert("data_group", [i, &tp, &data](){
+    tp.dg_insert("data_group", [i, &tp, &data](){
         // Signal to all others threads that 
         // are working for the group to wait.
-        tp.dispatch_group_synchronize("data_group"); 
+        tp.dg_synchronize("data_group"); 
         // Safely modify external container.
         data.push_back(i);
         // Signal all others threads in the group to go on.
-        tp.dispatch_group_synchronize("data_group");
+        tp.dg_synchronize("data_group");
     }); 
 }
-tp.dispatch_group_leave("data_group");  
+tp.dg_close("data_group");  
 ```
 
 ### Sleep
@@ -294,6 +307,15 @@ If you don't set a callback the threadpool will fire the
 default one, that does nothing.
 You can override this behaviour **[at your risk]** declaring the follow
 macro: `#define TP_ENABLE_DEFAULT_EXCEPTION_CALL 0`
+
+### Internal excpetions
+Every method of the threadpool can throw for excpetional causes like
+failed memory allocation. Futhermore by default the input checking is active,
+than the threadpool can throw some specific expections: the methods
+where this behavior is expected, are marked with *noexcept(false)*.
+You can disable the input checking with the following macro:
+`#define TP_ENABLE_SANITY_CHECKS 0`
+
 
 ## Performance
 This test was a write to text test: write one million of lines
