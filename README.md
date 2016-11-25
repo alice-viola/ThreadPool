@@ -42,8 +42,7 @@ LinuxMint 17.1 Rebecca (g++ 4.8.2), Apple iOS 9.3 (XCode 8.0, LLVM version 8.0).
 
 ## Compile
 You can run some example called in the provided main.cpp file
-with the following bash lines, or simply include the *threadpool.hpp* file
-in your projects.
+with the following bash lines:
 
 for macOS (and OSX as well):
 ```bash
@@ -57,6 +56,9 @@ g++ -std=c++11 -O3 -pthread main.cpp
 
 The -O3 optimization parameter is obviously optional.
 
+Otherwise, simply include the *threadpool.hpp* file
+in your projects.
+
 ## First contact
 ```C++
 #include "threadpool.hpp"
@@ -64,13 +66,16 @@ The -O3 optimization parameter is obviously optional.
 
 using namespace astp;
 
-ThreadPool tp = ThreadPool(); 
-for (int i = 0; i < 100; i++) {
-    tp.push([i]() {
-        std::cout << "ThreadPool " << i << std::endl; 
-    });
+int main() {
+    ThreadPool tp = ThreadPool(); 
+    for (int i = 0; i < 100; i++) {
+        tp.push([i]() {
+            std::cout << "ThreadPool " << i << std::endl; 
+        });
+    }
+    tp.wait();
+    return 0;
 }
-tp.wait();
 ```
 ## API
 

@@ -7,7 +7,7 @@
 *             |_| |_| |_|_|  \___|\__,_|\__,_|_|   \___/ \___/|_|                    *
 *                                                                                    *
 *                   BECAUSE POWER IS NOTHING WITHOUT CONTROL                         *
-*             You should not inheritance from any of these class.                    *
+*             You should not inheritance from any of these classes.                  *
 *                       No virtual destructors provided.                             *
 *                                                                                    *
 *                                                                                    *
@@ -240,8 +240,7 @@ namespace astp
         *   of threads supported by the architecture.
         *   At least one thread is created.
         */
-        ThreadPool(int max_threads = std::thread::hardware_concurrency()) 
-            noexcept(false) : 
+        ThreadPool(int max_threads = std::thread::hardware_concurrency()) noexcept(false) : 
             _threads_count(0),
             _thread_to_kill_c(),
             _thread_sleep_time_ns(1000),
@@ -251,9 +250,12 @@ namespace astp
         {
             _sem_api = Semaphore(0);
             _sem_job_ins_container = Semaphore(0);
+            _sem_threads_state = Semaphore(0);
+            
             #if TP_ENABLE_DEFAULT_EXCEPTION_CALL
             _exception_action = [](std::exception_ptr e) {};
             #endif
+
             #if TP_ENABLE_SANITY_CHECKS
             try {
                 resize(max_threads);
@@ -268,8 +270,11 @@ namespace astp
         /**
         *   Copy constructor.
         */ 
-        ThreadPool(const ThreadPool &TP) noexcept {};
-
+        ThreadPool(const ThreadPool &TP) noexcept(false) {};
+        
+        /**
+        *   Deleted assignment operators
+        */
         ThreadPool& operator = (ThreadPool&& TP) = delete;
         ThreadPool& operator = (const ThreadPool& TP) = delete;
     
@@ -277,7 +282,7 @@ namespace astp
         *   When the ThreadPool is deallocated,
         *   the threads still running are joined().
         */
-        ~ThreadPool() {
+        ~ThreadPool() noexcept {
             try {
                 if (_run_pool_thread) {
                     _run_pool_thread = false;
@@ -294,11 +299,13 @@ namespace astp
         resize(int num_threads = std::thread::hardware_concurrency()) 
         noexcept(false) {
             if (!_run_pool_thread) return;
-            _sem_api.wait();
+            
             #if TP_ENABLE_SANITY_CHECKS
             _condition_check("Number of threads in resize or alloc must be greater than 0", 
                 [&](){ return num_threads < 1; });
             #endif
+
+            _sem_api.wait();
             auto diff = abs(num_threads - _threads_count);
             if (num_threads > _threads_count) {
                 for (auto i = 0; i < diff; ++i) _safe_thread_push();
@@ -355,11 +362,14 @@ namespace astp
             _condition_check(Errors::apply_it_num, 
                 [&](){ return count < 0; });
             #endif
+
             std::atomic<int> counter(0); 
             auto func = [&] () { f(); ++counter; };
+            
             std::unique_lock<std::mutex> lock(_mutex_queue);
             for (auto i = 0; i < count; ++i) _unsafe_queue_push_front(func);
             lock.unlock();
+            
             while (counter != count) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
             }
@@ -371,6 +381,7 @@ namespace astp
             _condition_check(Errors::apply_it_num, 
                 [&](){ return count < 0; });
             #endif
+            
             std::unique_lock<std::mutex> lock(_mutex_queue);
             for (auto i = 0; i < count; ++i) _unsafe_queue_push(f);
             lock.unlock();
@@ -420,10 +431,12 @@ namespace astp
             _sem_api.wait();
             _run_pool_thread = false;
             _prev_threads = 0;
+            
             while(_threads_count != 0) {
                 ++_prev_threads;
                 _safe_thread_pop();
             }
+            
             while(_thread_to_kill_c != 0) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
             }
@@ -526,7 +539,7 @@ namespace astp
         dg_open(const std::string& id) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            if (!_unsafe_dg_id_check(id, it)) {
+            if (_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
                     throw std::runtime_error(Errors::dg_not_empty(id));
                 #else
@@ -535,6 +548,7 @@ namespace astp
             }   
             _groups.insert(std::make_pair(id, std::move(DispatchGroup(id))));
         }
+
         /**
         *   Insert a job to do in a specific group.
         *   If the group not exist, nothing is done.
@@ -545,7 +559,7 @@ namespace astp
         dg_insert(const std::string& id, F&& f) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            if (_unsafe_dg_id_check(id, it)) {
+            if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
                     throw std::runtime_error(Errors::dg_empty(id));
                 #else
@@ -554,6 +568,7 @@ namespace astp
             }   
             it->second.insert(f);
         }
+
         /**
         *   Create a new group, insert a job on it
         *   and dispatch it.
@@ -565,7 +580,7 @@ namespace astp
         dg_now(const std::string& id, F&& f) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            if (!_unsafe_dg_id_check(id, it)) {
+            if (_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
                     throw std::runtime_error(Errors::dg_not_empty(id));
                 #else
@@ -578,6 +593,7 @@ namespace astp
             it->second.leave();
             _safe_queue_push_front(it->second.jobs()[0]);
         }
+
         /**
         *   Signal to a group that the jobs immission 
         *   is end, than start pushing the group jobs
@@ -589,7 +605,7 @@ namespace astp
         dg_close_with_barrier(const std::string &id, const F&& f) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            if (_unsafe_dg_id_check(id, it)) {
+            if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
                     throw std::runtime_error(Errors::dg_empty(id));
                 #else
@@ -600,6 +616,7 @@ namespace astp
             auto jobs = it->second.jobs();
             for (auto &j : jobs) { push(j); }
         }
+
         /**
         *   Signal to a group that the jobs immission 
         *   is end, than start pushing the group jobs
@@ -609,7 +626,7 @@ namespace astp
         dg_close(const std::string& id) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            if (_unsafe_dg_id_check(id, it)) {
+            if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
                     throw std::runtime_error(Errors::dg_empty(id));
                 #else
@@ -620,6 +637,7 @@ namespace astp
             auto jobs = it->second.jobs();
             for (auto &j : jobs) { push(j); }
         }
+
         /**
         *   Wait until every job in a group is computed.
         *   This is a thread blocking call.
@@ -627,7 +645,7 @@ namespace astp
         void
         dg_wait(const std::string &id) noexcept(false) {
             std::map<std::string, DispatchGroup>::iterator it;
-            if (_unsafe_dg_id_check(id, it)) {
+            if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
                     throw std::runtime_error(Errors::dg_empty(id));
                 #else
@@ -637,6 +655,7 @@ namespace astp
             while(!it->second.has_finished()) std::chrono::nanoseconds(_thread_sleep_time_ns); 
             _groups.erase(it);
         }
+
         /**
         *   Wait until every job in a group is computed.
         *   This is a thread blocking call. 
@@ -645,14 +664,14 @@ namespace astp
         template<class F> void
         dg_wait(const std::string &id, F&& f) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
-            try {
-                dg_wait(id);
-                f();
-            } catch(std::runtime_error e) {
-                throw e;
-            } catch(...) {
-                throw;
-            }
+                try {
+                    dg_wait(id);
+                    f();
+                } catch(std::runtime_error e) {
+                    throw e;
+                } catch(...) {
+                    throw;
+                }
             #else
                 dg_wait(id);
                 try {
@@ -672,7 +691,7 @@ namespace astp
         dg_synchronize(const std::string &id) noexcept(false)  {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            if (_unsafe_dg_id_check(id, it)) {
+            if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
                     throw std::runtime_error(Errors::dg_empty(id));
                 #else
@@ -686,7 +705,7 @@ namespace astp
         dg_end_synchronize(const std::string id) noexcept(false)  {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            if (_unsafe_dg_id_check(id, it)) {
+            if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
                     throw std::runtime_error(Errors::dg_empty(id));
                 #else
@@ -704,13 +723,11 @@ namespace astp
         */
         template<class F> void
         set_excpetion_action(std::function<void(F)> f) {
-            _sem_api.wait();
             auto func = [&f] (std::exception_ptr excp) {
-                try {
-                    std::rethrow_exception(excp);
-                } catch(F e) {
-                    f(e);
-                }};
+                try { std::rethrow_exception(excp);
+                } catch(F e) { f(e); }
+            };
+            _sem_api.wait();
             _exception_action = func;
             _sem_api.signal();
         }
@@ -740,6 +757,8 @@ namespace astp
         *   Semaphore for class thread-safety. 
         */
         Semaphore _sem_api;
+
+        Semaphore _sem_threads_state;
         /**
         *   Optional semaphore for jobs lambda data
         *   protection in critical sections.
@@ -780,8 +799,8 @@ namespace astp
         */
         std::atomic<int> _thread_to_kill_c;
         /** 
-        *   Stores the id's of the thread
-        *   the will be killed.
+        *   Stores the id's of the threads
+        *   that will be kills.
         */
         std::vector<std::thread::id> _threads_to_kill_id;
         /** 
@@ -814,14 +833,18 @@ namespace astp
             dg_empty(const std::string& id) {
                 return "ThreadPool: group with id " + id + " not exist";
             };
+            
             static std::string 
             dg_not_empty(const std::string& id) {
                 return "ThreadPool: group with id " + id + " already exist";
             };
+            
             static constexpr auto sleep_time = 
                 "ThreadPool: sleep time value must be greater or equal to zero";
+            
             static constexpr auto apply_it_num =
                 "ThreadPool: Number of iterations in apply must be greater than zero";
+            
             static constexpr auto resize_alloc = 
                 "ThreadPool: Number of threads in resize or alloc must be greater than zero";
         };
@@ -844,10 +867,7 @@ namespace astp
         _unsafe_dg_id_check(const std::string &id, 
             std::map<std::string, DispatchGroup>::iterator& it) {
             it = _groups.find(id);
-            if (it == _groups.end()) {
-                return false;
-            }
-            return true;
+            return (it == _groups.end()) ? false : true;
         }
 
         /**
@@ -928,6 +948,7 @@ namespace astp
         _safe_queue_pop() {
             std::unique_lock<std::mutex> lock(_mutex_queue);
             if (_queue.empty()) return std::function<void()>(); 
+            
             auto t = _queue.front();
             _queue.pop_front();
             return t;
@@ -953,6 +974,7 @@ namespace astp
         _safe_thread_pop() {
             std::unique_lock<std::mutex> lock(_mutex_pool);
             if (_pool.empty()) return; 
+            
             ++_thread_to_kill_c;
             _threads_to_kill_id.push_back(_pool.back().get_id());
             _pool.back().detach();

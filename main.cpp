@@ -1,3 +1,4 @@
+#define DEBUG
 #include "threadpool.hpp"
 #include <iostream>
 
@@ -34,6 +35,7 @@ example() {
 
 
     tp.dg_open("writetest");
+    std::cout << "A" << std::endl;
     for (int i = 0; i < 100; i++) {
         tp.dg_insert("writetest", [i](){ add(i); });
     }
