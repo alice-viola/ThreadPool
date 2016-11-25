@@ -182,22 +182,22 @@ public:
             for (int i = 0; i < 1000; i++) {
                 tp.dg_insert("group1", [i]() { auto a = i * 2; });
             }
+            tp.dg_close("group1");  
         });
         acc_thread[1] = std::thread([&tp] () {
-            for (int i = 0; i < 1000; i++) {
-                tp.dg_open("group1");
-            }
-            tp.dg_close("group1");  
-            tp.dg_wait("group1");
-        });
-        acc_thread[2] = std::thread([&tp] () {
             tp.dg_open("group2");
-            for (int i = 0; i < 100; i++) {
-                tp.dg_insert("group2", [i]() { auto a = i * 2; });
-            }
-            tp.dg_close("group2");    
+            tp.dg_close("group2");  
             tp.dg_wait("group2");
         });
+        acc_thread[2] = std::thread([&tp] () {
+            tp.dg_open("group3");
+            for (int i = 0; i < 100; i++) {
+                tp.dg_insert("group3", [i]() { auto a = i * 2; });
+            }
+            tp.dg_close("group3");    
+            tp.dg_wait("group3");
+        });
+        
         for (int i = 0; i < acc_thread.size(); i++) {
             acc_thread[i].join();
         }

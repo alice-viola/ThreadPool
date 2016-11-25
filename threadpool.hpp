@@ -7,8 +7,8 @@
 *             |_| |_| |_|_|  \___|\__,_|\__,_|_|   \___/ \___/|_|                    *
 *                                                                                    *
 *                   BECAUSE POWER IS NOTHING WITHOUT CONTROL                         *
-*             You should not inheritance from any of these classes.                  *
-*                       No virtual destructors provided.                             *
+*             You should not inheritance from any of these classes:                  *
+*                       no virtual destructors provided.                             *
 *                                                                                    *
 *                                                                                    *
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * **  
@@ -83,10 +83,10 @@ namespace astp
         *   that represents a semaphore
         *   in order to make the ThreadPool thread safe.
         */
-        class Semaphore 
+        class Semaphore
         {
         public:
-            Semaphore(int sem_count = true) : _sem_value(sem_count) {};
+            Semaphore(int value = 1) : _value(value) {};
             Semaphore(const Semaphore &S) : _mutex(), _cv() {};
             Semaphore& operator=(Semaphore S) { return *this; }
             ~Semaphore() {};
@@ -94,35 +94,30 @@ namespace astp
             void
             wait() {
                 std::unique_lock<std::mutex> lock(_mutex);
-                while(!_sem_value) _cv.wait(lock);
-                --_sem_value;
-            }
-
-            template<class T> void
-            wait(T&& pred) {
-                std::unique_lock<std::mutex> lock(_mutex);
-                while(_sem_value <= 0) _cv.wait(lock, pred);
-                --_sem_value;
+                --_value;
+                if (_value < 0) {
+                    do {
+                        _cv.wait(lock);
+                    } while (_wake_ups < 1);
+                    --_wake_ups;
+                }
             }
     
             void 
             signal() {
                 std::unique_lock<std::mutex> lock(_mutex);
-                _cv.notify_one();
-                ++_sem_value;
-            }
-
-            void 
-            signal_all() {
-                std::unique_lock<std::mutex> lock(_mutex);
-                _cv.notify_all();
-                ++_sem_value;
+                ++_value;
+                if (_value <= 0) {
+                    ++_wake_ups;
+                    _cv.notify_one();
+                }
             }
     
         private:
+            int _value;
+            int _wake_ups = 0;
             std::condition_variable _cv;
             std::mutex _mutex;
-            std::atomic<int> _sem_value;
         };
 
         /**
@@ -163,6 +158,7 @@ namespace astp
             leave()  {
                 _closed = true;
                 _jobs_count_at_leave = _jobs.size();
+                _check_end_condition();
             }
 
             template<class T> void 
@@ -172,7 +168,9 @@ namespace astp
             }
 
             bool
-            is_leave() const  { return _closed; }
+            is_leave() const { 
+                return _closed; 
+            }
 
             template<class F> void
             insert(const F &f)  {
@@ -185,15 +183,19 @@ namespace astp
             jobs()  { return _jobs; }
 
             bool
-            has_finished()  {
+            has_finished() const {
                 return _has_finished;
             }
 
             std::string
-            id() const  { return _id; }
+            id() const { 
+                return _id; 
+            }
 
             int
-            jobs_count()  { return _jobs.size(); }
+            jobs_count() const { 
+                return _jobs.size(); 
+            }
 
             void
             synchronize() {
@@ -218,6 +220,11 @@ namespace astp
             void
             _signal_end_of_job() { 
                 _jobs_done_counter++; 
+                _check_end_condition();
+            }
+
+            void
+            _check_end_condition() {
                 if (_jobs_done_counter == _jobs_count_at_leave && _closed) {
                     _has_finished = true;
                     if (_end_action) _end_action();
@@ -301,7 +308,7 @@ namespace astp
             if (!_run_pool_thread) return;
             
             #if TP_ENABLE_SANITY_CHECKS
-            _condition_check("Number of threads in resize or alloc must be greater than 0", 
+            _condition_check(errors.resize_alloc, 
                 [&](){ return num_threads < 1; });
             #endif
 
@@ -359,7 +366,7 @@ namespace astp
         template<class F> void
         apply_for(const int count, F&& f) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
-            _condition_check(Errors::apply_it_num, 
+            _condition_check(errors.apply_it_num, 
                 [&](){ return count < 0; });
             #endif
 
@@ -378,7 +385,7 @@ namespace astp
         template<class F> void
         apply_for_async(const int count, F&& f) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
-            _condition_check(Errors::apply_it_num, 
+            _condition_check(errors.apply_it_num, 
                 [&](){ return count < 0; });
             #endif
             
@@ -482,7 +489,7 @@ namespace astp
         void
         set_sleep_time_ns(const int time_ns) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
-            _condition_check(Errors::sleep_time, 
+            _condition_check(errors.sleep_time, 
                 [&](){ return time_ns < 0; });
             #endif
             _thread_sleep_time_ns = time_ns;
@@ -495,7 +502,7 @@ namespace astp
         void
         set_sleep_time_ms(const int time_ms) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
-            _condition_check(Errors::sleep_time, 
+            _condition_check(errors.sleep_time, 
                 [&](){ return time_ms < 0; });
             #endif
             _thread_sleep_time_ns = time_ms * 1000000;
@@ -509,7 +516,7 @@ namespace astp
         template<class F> void
         set_sleep_time_s(const F time_s) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
-            _condition_check(Errors::sleep_time, 
+            _condition_check(errors.sleep_time, 
                 [&](){ return time_s < 0; });
             #endif
             _thread_sleep_time_ns = static_cast<int>(time_s * 1000000000);
@@ -541,7 +548,7 @@ namespace astp
             std::map<std::string, DispatchGroup>::iterator it;
             if (_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
-                    throw std::runtime_error(Errors::dg_not_empty(id));
+                    throw std::runtime_error(errors.dg_not_empty(id));
                 #else
                     return;
                 #endif
@@ -561,7 +568,7 @@ namespace astp
             std::map<std::string, DispatchGroup>::iterator it;
             if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
-                    throw std::runtime_error(Errors::dg_empty(id));
+                    throw std::runtime_error(errors.dg_empty(id));
                 #else
                     return;
                 #endif
@@ -582,7 +589,7 @@ namespace astp
             std::map<std::string, DispatchGroup>::iterator it;
             if (_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
-                    throw std::runtime_error(Errors::dg_not_empty(id));
+                    throw std::runtime_error(errors.dg_not_empty(id));
                 #else
                     return;
                 #endif
@@ -607,7 +614,7 @@ namespace astp
             std::map<std::string, DispatchGroup>::iterator it;
             if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
-                    throw std::runtime_error(Errors::dg_empty(id));
+                    throw std::runtime_error(errors.dg_empty(id));
                 #else
                     return;
                 #endif
@@ -628,7 +635,7 @@ namespace astp
             std::map<std::string, DispatchGroup>::iterator it;
             if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
-                    throw std::runtime_error(Errors::dg_empty(id));
+                    throw std::runtime_error(errors.dg_empty(id));
                 #else
                     return;
                 #endif
@@ -647,7 +654,7 @@ namespace astp
             std::map<std::string, DispatchGroup>::iterator it;
             if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
-                    throw std::runtime_error(Errors::dg_empty(id));
+                    throw std::runtime_error(errors.dg_empty(id));
                 #else
                     return;
                 #endif
@@ -693,7 +700,7 @@ namespace astp
             std::map<std::string, DispatchGroup>::iterator it;
             if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
-                    throw std::runtime_error(Errors::dg_empty(id));
+                    throw std::runtime_error(errors.dg_empty(id));
                 #else
                     return;
                 #endif
@@ -707,7 +714,7 @@ namespace astp
             std::map<std::string, DispatchGroup>::iterator it;
             if (!_unsafe_dg_id_check(id, it)) {
                 #if TP_ENABLE_SANITY_CHECKS
-                    throw std::runtime_error(Errors::dg_empty(id));
+                    throw std::runtime_error(errors.dg_empty(id));
                 #else
                     return;
                 #endif
@@ -829,25 +836,25 @@ namespace astp
         */
         struct Errors 
         {            
-            static std::string 
+            std::string 
             dg_empty(const std::string& id) {
                 return "ThreadPool: group with id " + id + " not exist";
             };
             
-            static std::string 
+            std::string 
             dg_not_empty(const std::string& id) {
                 return "ThreadPool: group with id " + id + " already exist";
             };
             
-            static constexpr auto sleep_time = 
+            std::string sleep_time = 
                 "ThreadPool: sleep time value must be greater or equal to zero";
             
-            static constexpr auto apply_it_num =
+            std::string apply_it_num =
                 "ThreadPool: Number of iterations in apply must be greater than zero";
             
-            static constexpr auto resize_alloc = 
+            std::string resize_alloc = 
                 "ThreadPool: Number of threads in resize or alloc must be greater than zero";
-        };
+        } errors;
 
         /**
         *   Given a condition to check, throw an error
