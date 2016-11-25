@@ -1,28 +1,41 @@
-/**
-*
-*   The MIT License (MIT)
-*   
-*   Copyright (c) 2016 Amedeo Setti
-*   
-*   Permission is hereby granted, free of charge, to any person obtaining a copy
-*   of this software and associated documentation files (the "Software"), to deal
-*   in the Software without restriction, including without limitation the rights
-*   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-*   copies of the Software, and to permit persons to whom the Software is
-*   furnished to do so, subject to the following conditions:
-*   
-*   The above copyright notice and this permission notice shall be included in all
-*   copies or substantial portions of the Software.
-*   
-*   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-*   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-*   FITNESS FOR A PARTICULAR PURPOSE AND NON INFRINGEMENT. IN NO EVENT SHALL THE
-*   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-*   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-*   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-*   SOFTWARE
-*
-**/
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+*                                                                                    *
+*            _____ _                        _ ____             _                     *    
+*           |_   _| |__  _ __ ___  __ _  __| |  _ \ ___   ___ | |                    *    
+*             | | | '_ \| '__/ _ \/ _` |/ _` | |_) / _ \ / _ \| |                    *
+*             | | | | | | | |  __/ (_| | (_| |  __/ (_) | (_) | |                    *
+*             |_| |_| |_|_|  \___|\__,_|\__,_|_|   \___/ \___/|_|                    *
+*                                                                                    *
+*                   BECAUSE POWER IS NOTHING WITHOUT CONTROL                         *
+*             You should not inheritance from any of these class.                    *
+*                       No virtual destructors provided.                             *
+*                                                                                    *
+*                                                                                    *
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * **  
+*                                                                                    *
+*   The MIT License (MIT)                                                            *
+*                                                                                    *
+*   Copyright (c) 2016 Amedeo Setti                                                  *
+*                                                                                    *
+*   Permission is hereby granted, free of charge, to any person obtaining a copy     *
+*   of this software and associated documentation files (the "Software"), to deal    *
+*   in the Software without restriction, including without limitation the rights     *
+*   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell        *
+*   copies of the Software, and to permit persons to whom the Software is            *
+*   furnished to do so, subject to the following conditions:                         *
+*                                                                                    *
+*   The above copyright notice and this permission notice shall be included in all   *
+*   copies or substantial portions of the Software.                                  *
+*                                                                                    *
+*   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR       *
+*   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,         *
+*   FITNESS FOR A PARTICULAR PURPOSE AND NON INFRINGEMENT. IN NO EVENT SHALL THE     *
+*   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER           *
+*   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,    *
+*   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE    *
+*   SOFTWARE                                                                         *
+*                                                                                    *
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #ifndef _THREAD_POOL_HPP_
 #define _THREAD_POOL_HPP_
@@ -52,19 +65,11 @@
 #define TP_ENABLE_SANITY_CHECKS 1
 #endif
 
-namespace astp {
-    /**
-    *    _____ _                        _ ____             _ 
-    *   |_   _| |__  _ __ ___  __ _  __| |  _ \ ___   ___ | |
-    *     | | | '_ \| '__/ _ \/ _` |/ _` | |_) / _ \ / _ \| |
-    *     | | | | | | | |  __/ (_| | (_| |  __/ (_) | (_) | |
-    *     |_| |_| |_|_|  \___|\__,_|\__,_|_|   \___/ \___/|_|
-    *
-    *     BECAUSE POWER IS NOTHING WITHOUT CONTROL                                                          
-    */
+namespace astp 
+{    
     class ThreadPool
     {
-    protected:
+    private:
         /**
         *    ____                             _                    
         *   / ___|  ___ _ __ ___   __ _ _ __ | |__   ___  _ __ ___ 
@@ -220,8 +225,15 @@ namespace astp {
             }
         };
 
+        /**
+        *       _    ____ ___ 
+        *      / \  |  _ \_ _|
+        *     / _ \ | |_) | | 
+        *    / ___ \|  __/| | 
+        *   /_/   \_\_|  |___|
+        *
+        */
     public:
-
         /**
         *   If *max_threads* is not specified,
         *   the pool size is set to the max number
@@ -266,10 +278,12 @@ namespace astp {
         *   the threads still running are joined().
         */
         ~ThreadPool() {
-            if (_run_pool_thread) {
-                _run_pool_thread = false;
-                for (auto &t : _pool) t.join();
-            }
+            try {
+                if (_run_pool_thread) {
+                    _run_pool_thread = false;
+                    for (auto &t : _pool) t.join();
+                }
+            } catch (...) {}
         };
 
         /**
@@ -336,9 +350,9 @@ namespace astp {
         *   execution is done.
         */
         template<class F> void
-        apply_for(const int count, F&& f) {
+        apply_for(const int count, F&& f) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
-            _condition_check("Number of iterations must be greater than zero", 
+            _condition_check(Errors::apply_it_num, 
                 [&](){ return count < 0; });
             #endif
             std::atomic<int> counter(0); 
@@ -354,7 +368,7 @@ namespace astp {
         template<class F> void
         apply_for_async(const int count, F&& f) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
-            _condition_check("Number of iterations must be greater than zero", 
+            _condition_check(Errors::apply_it_num, 
                 [&](){ return count < 0; });
             #endif
             std::unique_lock<std::mutex> lock(_mutex_queue);
@@ -455,7 +469,7 @@ namespace astp {
         void
         set_sleep_time_ns(const int time_ns) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
-            _condition_check("Sleep time value must be greater or equal to zero", 
+            _condition_check(Errors::sleep_time, 
                 [&](){ return time_ns < 0; });
             #endif
             _thread_sleep_time_ns = time_ns;
@@ -468,7 +482,7 @@ namespace astp {
         void
         set_sleep_time_ms(const int time_ms) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
-            _condition_check("Sleep time value must be greater or equal to zero", 
+            _condition_check(Errors::sleep_time, 
                 [&](){ return time_ms < 0; });
             #endif
             _thread_sleep_time_ns = time_ms * 1000000;
@@ -482,7 +496,7 @@ namespace astp {
         template<class F> void
         set_sleep_time_s(const F time_s) noexcept(false) {
             #if TP_ENABLE_SANITY_CHECKS
-            _condition_check("Sleep time value must be greater or equal to zero", 
+            _condition_check(Errors::sleep_time, 
                 [&](){ return time_s < 0; });
             #endif
             _thread_sleep_time_ns = static_cast<int>(time_s * 1000000000);
@@ -512,13 +526,13 @@ namespace astp {
         dg_open(const std::string& id) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            it = _groups.find(id);
-            #if TP_ENABLE_SANITY_CHECKS
-                _condition_check("You have already open the group " + id, 
-                    [&](){ return it != _groups.end(); });
-            #else
-                if (it != _groups.end()) return;    
-            #endif
+            if (!_unsafe_dg_id_check(id, it)) {
+                #if TP_ENABLE_SANITY_CHECKS
+                    throw std::runtime_error(Errors::dg_not_empty(id));
+                #else
+                    return;
+                #endif
+            }   
             _groups.insert(std::make_pair(id, std::move(DispatchGroup(id))));
         }
         /**
@@ -531,13 +545,13 @@ namespace astp {
         dg_insert(const std::string& id, F&& f) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            it = _groups.find(id);
-            #if TP_ENABLE_SANITY_CHECKS
-                _condition_check("You have not open the group " + id, 
-                    [&](){ return it == _groups.end(); });
-            #else
-                if (it == _groups.end()) return;  
-            #endif
+            if (_unsafe_dg_id_check(id, it)) {
+                #if TP_ENABLE_SANITY_CHECKS
+                    throw std::runtime_error(Errors::dg_empty(id));
+                #else
+                    return;
+                #endif
+            }   
             it->second.insert(f);
         }
         /**
@@ -551,13 +565,13 @@ namespace astp {
         dg_now(const std::string& id, F&& f) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            it = _groups.find(id);
-            #if TP_ENABLE_SANITY_CHECKS
-                _condition_check("You have already open the group " + id, 
-                    [&](){ return it != _groups.end(); });
-            #else
-                if (it != _groups.end()) return;  
-            #endif
+            if (!_unsafe_dg_id_check(id, it)) {
+                #if TP_ENABLE_SANITY_CHECKS
+                    throw std::runtime_error(Errors::dg_not_empty(id));
+                #else
+                    return;
+                #endif
+            }   
             _groups.insert(std::make_pair(id, std::move(DispatchGroup(id))));
             it = _groups.find(id);
             it->second.insert(f);
@@ -575,13 +589,13 @@ namespace astp {
         dg_close_with_barrier(const std::string &id, const F&& f) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            it = _groups.find(id);
-            #if TP_ENABLE_SANITY_CHECKS
-                _condition_check("The group not exist " + id, 
-                    [&](){ return it == _groups.end(); });
-            #else
-                if (it == _groups.end()) return;  
-            #endif
+            if (_unsafe_dg_id_check(id, it)) {
+                #if TP_ENABLE_SANITY_CHECKS
+                    throw std::runtime_error(Errors::dg_empty(id));
+                #else
+                    return;
+                #endif
+            }   
             it->second.leave(f);
             auto jobs = it->second.jobs();
             for (auto &j : jobs) { push(j); }
@@ -595,13 +609,13 @@ namespace astp {
         dg_close(const std::string& id) noexcept(false) {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            it = _groups.find(id);
-            #if TP_ENABLE_SANITY_CHECKS
-                _condition_check("The group not exist " + id, 
-                    [&](){ return it == _groups.end(); });
-            #else
-                if (it == _groups.end()) return;  
-            #endif
+            if (_unsafe_dg_id_check(id, it)) {
+                #if TP_ENABLE_SANITY_CHECKS
+                    throw std::runtime_error(Errors::dg_empty(id));
+                #else
+                    return;
+                #endif
+            }   
             it->second.leave();
             auto jobs = it->second.jobs();
             for (auto &j : jobs) { push(j); }
@@ -613,14 +627,13 @@ namespace astp {
         void
         dg_wait(const std::string &id) noexcept(false) {
             std::map<std::string, DispatchGroup>::iterator it;
-            it = _groups.find(id);
-            if (it == _groups.end()) return;
-            #if TP_ENABLE_SANITY_CHECKS
-                _condition_check("The group not exist " + id, 
-                    [&](){ return it == _groups.end(); });
-            #else
-                if (it == _groups.end()) return;  
-            #endif
+            if (_unsafe_dg_id_check(id, it)) {
+                #if TP_ENABLE_SANITY_CHECKS
+                    throw std::runtime_error(Errors::dg_empty(id));
+                #else
+                    return;
+                #endif
+            }   
             while(!it->second.has_finished()) std::chrono::nanoseconds(_thread_sleep_time_ns); 
             _groups.erase(it);
         }
@@ -659,13 +672,13 @@ namespace astp {
         dg_synchronize(const std::string &id) noexcept(false)  {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            it = _groups.find(id);
-            #if TP_ENABLE_SANITY_CHECKS
-                _condition_check("The group not exist " + id, 
-                    [&](){ return it == _groups.end(); });
-            #else
-                if (it == _groups.end()) return;  
-            #endif
+            if (_unsafe_dg_id_check(id, it)) {
+                #if TP_ENABLE_SANITY_CHECKS
+                    throw std::runtime_error(Errors::dg_empty(id));
+                #else
+                    return;
+                #endif
+            }   
             it->second.synchronize();
         }
         /**/
@@ -673,13 +686,13 @@ namespace astp {
         dg_end_synchronize(const std::string id) noexcept(false)  {
             std::unique_lock<std::mutex> lock(_mutex_groups);
             std::map<std::string, DispatchGroup>::iterator it;
-            it = _groups.find(id);
-            #if TP_ENABLE_SANITY_CHECKS
-                _condition_check("The group not exist " + id, 
-                    [&](){ return it == _groups.end(); });
-            #else
-                if (it == _groups.end()) return;  
-            #endif
+            if (_unsafe_dg_id_check(id, it)) {
+                #if TP_ENABLE_SANITY_CHECKS
+                    throw std::runtime_error(Errors::dg_empty(id));
+                #else
+                    return;
+                #endif
+            }   
             it->second.end_synchronize();
         }
 
@@ -702,6 +715,14 @@ namespace astp {
             _sem_api.signal();
         }
 
+        /**  
+        *    ____       _            _       
+        *   |  _ \ _ __(_)_   ____ _| |_ ___ 
+        *   | |_) | '__| \ \ / / _` | __/ _ \
+        *   |  __/| |  | |\ V / (_| | ||  __/
+        *   |_|   |_|  |_| \_/ \__,_|\__\___|
+        *
+        */                                    
     private:
         /** 
         *   Mutex for queue access. 
@@ -782,14 +803,60 @@ namespace astp {
         std::function<void(std::exception_ptr)> _exception_action; 
         std::mutex _mutex_exceptions;
 
-        template<class F> void
-        _exc_exception_action(F excpetion) {
-            _exception_action(excpetion);
-        }
+        /**
+        *   String errors that are throw when user 
+        *   submit wrong inputs or try to do illegal
+        *   operations.
+        */
+        struct Errors 
+        {            
+            static std::string 
+            dg_empty(const std::string& id) {
+                return "ThreadPool: group with id " + id + " not exist";
+            };
+            static std::string 
+            dg_not_empty(const std::string& id) {
+                return "ThreadPool: group with id " + id + " already exist";
+            };
+            static constexpr auto sleep_time = 
+                "ThreadPool: sleep time value must be greater or equal to zero";
+            static constexpr auto apply_it_num =
+                "ThreadPool: Number of iterations in apply must be greater than zero";
+            static constexpr auto resize_alloc = 
+                "ThreadPool: Number of threads in resize or alloc must be greater than zero";
+        };
 
+        /**
+        *   Given a condition to check, throw an error
+        *   if the condition is true.
+        */
         template<class M, class T> void 
         _condition_check(M&& m, T&& t) noexcept(false) {
             if (t()) throw std::runtime_error(m);
+        }
+
+        /**
+        *   Check if the groups map contains or
+        *   not the required id. Used
+        *   by dispatch_group methods.
+        */
+        bool
+        _unsafe_dg_id_check(const std::string &id, 
+            std::map<std::string, DispatchGroup>::iterator& it) {
+            it = _groups.find(id);
+            if (it == _groups.end()) {
+                return false;
+            }
+            return true;
+        }
+
+        /**
+        *   Called by pools threads when
+        *   an excpetion occours.
+        */
+        template<class F> void
+        _exc_exception_action(F excpetion) {
+            _exception_action(excpetion);
         }
 
         /**

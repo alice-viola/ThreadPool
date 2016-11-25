@@ -1,17 +1,41 @@
 #ThreadPool
 
 A thread safe pool using C++11 features.
+Developed with three main functionalities in mind: 
 
-Features:
+1. Provide fast methods in order to run tasks with high priority:
+    * *apply_for* methods
+    * *push* methods
 
+2. Provide methods for handle complex multithread apps, like Apple's GCD:
+    * *dispatch_group* methods
+
+3. Be scalable, safe and simple:
+    * Resize at run-time
+    * Stop and awake
+    * User inputs sanity checks (can be disabled)
+    * A lot of synchronizations methods ready to use
+    * Thread safe
+    * Excpetion handling
+    * Single header
+
+## Features:
+
+* Standard C++11
 * Task insertion via lambda expressions
+* Task insertion via functions
+* Futures from push
 * Resize of the pool at runtime
 * Support virtually an infinite number of threads in the pool
+* Stop and awake the pool
 * Fluent-Interface for task insertion
-* Fast
+* Fast methods for high priority tasks
 * Dispatch groups methods
-* Thread safe [under testing]
+* Barriers methods
+* Synchronizations methods
+* Thread safe 
 * Single header [threadpool.hpp]
+* MIT license
 
 The ThreadPool is tested under macOS Sierra 10.12 (Apple LLVM version 7.2.0 (clang-702.0.25)), 
 LinuxMint 17.1 Rebecca (g++ 4.8.2), Apple iOS 9.3 (XCode 8.0, LLVM version 8.0). 
@@ -52,26 +76,26 @@ tp.wait();
 
 ### Initialization
 You can create the thread pool with the default platform dependent number of threads, or
-you can specify your desired number: at least one thread is created.
+you can specify your desired number: at least one thread must be created.
 ```C++
 auto tp = astp::ThreadPool();   // -> Create default pool
 auto tp = astp::ThreadPool(64); // -> Create 64 threads
-auto tp = astp::ThreadPool(0);  // -> Create one thread
-auto tp = astp::ThreadPool(-1); // -> Create one thread
+auto tp = astp::ThreadPool(0);  // -> Throw an error
+auto tp = astp::ThreadPool(-1); // -> Throw an error
 ```
 ### Resize
 The pool can be resized after it was created: if the resizing operation decreases
 the current number of threads, a number equal to the difference is popped from 
 the pool, but only when the threads have finished to compute their workload.
-At least one thread is kept in the pool.
+At least one thread is must be kept in the pool.
 During the resizing, the stop of the pool is blocked.
 ```C++
 // For instace, current pool size is 64.
 tp.resize(31) // -> Pop  (64 - 31) = 33 threads
 // For instace, current pool size is 64.
 tp.resize(74) // -> Push (74 - 64) = 10 threads
-tp.resize(0)  // -> Resize to one thread
-tp.resize(-1) // -> Resize to one thread
+tp.resize(0)  // -> Throw an error
+tp.resize(-1) // -> Throw an error
 ```
 
 ### Insertion of tasks
@@ -169,6 +193,8 @@ tp.apply_for_async(600, [&vec, &i]() {
     i++;
 });
 // Returns immediately
+
+These functions throws an error if the iteration counts is less than zero.
 ```
 
 ### Future from push
@@ -222,6 +248,9 @@ tp.dg_now("group_id", []() { std::cout << "High priority" << std::endl; });
 This is useful when you have a lot of tasks in the pool queue and you want
 to process something without waiting the end of all others tasks. 
 
+All these methods throws if try to do illegal operations, like close a group that
+don't exist.
+
 ### Synchronization
 Thread pool has four methods that allow the synchronization of the threads in the pool
 when accessing some external critical part. These methods acts with binary semaphore
@@ -268,6 +297,7 @@ when there aren't jobs to do, so the threads in the pool will go to sleep.
 An higher value of sleep makes the pool less responsive when new jobs are
 inserted, so in case of performance critical tasks, you should set this
 interval small. 
+Throw if the interval is negative.
 *Seems that the minimal interval is or zero, or a time-slice of the scheduler.*
 ```C++
 // Set sleep in nanoseconds
@@ -289,7 +319,7 @@ auto current_pool_size = tp.pool_size();
 auto current_queue_size = tp.queue_size(); 
 auto is_empty = tp.queue_is_empty();
 ```
-### Excpetion handling [Under development]
+### Excpetion handling 
 You can set a callback the will be callled every time
 one of pool threads fire an excpetion:
 
@@ -310,12 +340,11 @@ macro: `#define TP_ENABLE_DEFAULT_EXCEPTION_CALL 0`
 
 ### Internal excpetions
 Every method of the threadpool can throw for excpetional causes like
-failed memory allocation. Futhermore by default the input checking is active,
+failed memory allocation. Futhermore, by default the input checking is active,
 than the threadpool can throw some specific expections: the methods
 where this behavior is expected, are marked with *noexcept(false)*.
 You can disable the input checking with the following macro:
 `#define TP_ENABLE_SANITY_CHECKS 0`
-
 
 ## Performance
 This test was a write to text test: write one million of lines
@@ -338,9 +367,6 @@ write(int i) {
     myfile.close();
 }
 ```
-
-## To Do
-I'm working on the exception handling.
 
 ## License
 ThreadPool is released under the MIT license.
