@@ -35,6 +35,7 @@ Developed with three main functionalities in mind:
 * Synchronizations methods
 * Thread safe 
 * Single header [threadpool.hpp]
+* When there aren't taks to do, ThreadPool consumes the 0% of CPU
 * MIT license
 
 The ThreadPool is tested under macOS Sierra 10.12 (Apple LLVM version 7.2.0 (clang-702.0.25)), 
@@ -67,7 +68,7 @@ in your projects.
 using namespace astp;
 
 int main() {
-    ThreadPool tp = ThreadPool(); 
+    ThreadPool tp; 
     for (int i = 0; i < 100; i++) {
         tp.push([i]() {
             std::cout << "ThreadPool " << i << std::endl; 
@@ -83,10 +84,10 @@ int main() {
 You can create the thread pool with the default platform dependent number of threads, or
 you can specify your desired number: at least one thread must be created.
 ```C++
-auto tp = astp::ThreadPool();   // -> Create default pool
-auto tp = astp::ThreadPool(64); // -> Create 64 threads
-auto tp = astp::ThreadPool(0);  // -> Throw an error
-auto tp = astp::ThreadPool(-1); // -> Throw an error
+astp::ThreadPool tp;     // -> Create default pool
+astp::ThreadPool tp(64); // -> Create 64 threads
+astp::ThreadPool tp(0);  // -> Throw an error
+astp::ThreadPool tp(-1); // -> Throw an error
 ```
 ### Resize
 The pool can be resized after it was created: if the resizing operation decreases
@@ -296,13 +297,8 @@ tp.dg_close("data_group");
 ```
 
 ### Sleep
-Every thread in the pool is running in a while loop (until you stop the pool).
-This is a consuming process, so you can set the sleep time for threads
-when there aren't jobs to do, so the threads in the pool will go to sleep.
-An higher value of sleep makes the pool less responsive when new jobs are
-inserted, so in case of performance critical tasks, you should set this
-interval small. 
-Throw if the interval is negative.
+The *wait* method put to sleep your caller thread. You can set this amount of time 
+with the following functions.
 *Seems that the minimal interval is or zero, or a time-slice of the scheduler.*
 ```C++
 // Set sleep in nanoseconds

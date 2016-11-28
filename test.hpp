@@ -44,7 +44,7 @@ public:
     create(int n) {
         auto start = start_func(__func__, n);
         try {
-            auto tp = ThreadPool(n);
+            ThreadPool tp(n);
             assert(tp.pool_size() == abs(n) || tp.pool_size() == 1);
         } catch(std::runtime_error e) {
             std::cout << e.what() << std::endl; 
@@ -55,7 +55,7 @@ public:
     void 
     resize(int new_size) {
         auto start = start_func(__func__, new_size);
-        auto tp = ThreadPool();
+        ThreadPool tp;
         tp.resize(new_size);
         assert(tp.pool_size() == new_size || tp.pool_size() == 1);
         end_func(start);
@@ -64,7 +64,7 @@ public:
     void 
     push(int iterations) {
         auto start = start_func(__func__, iterations);
-        auto tp = ThreadPool();
+        ThreadPool tp;
         tp.stop();
         for (int i = 0; i < iterations; i++) {
             tp.push([i] () { int a = i * 64; });    
@@ -76,7 +76,7 @@ public:
     void
     varidic_push(int iterations) {
         auto start = start_func(__func__, std::to_string(iterations), "ciao");
-        auto tp = ThreadPool();
+        ThreadPool tp;
         tp.stop();
         for (int i = 0; i < iterations; i++) {
             tp.push([i] () { int a = i * 64; }, [i] () { int a = i * 128; }, [i] () { int a = i * 256; });    
@@ -88,7 +88,7 @@ public:
     void 
     set_sleep_time(int n) {
         auto start = start_func(__func__, n);
-        auto tp = ThreadPool();
+        ThreadPool tp;
         tp.set_sleep_time_ns(n);
         assert(tp.sleep_time_ns() == abs(n));
         end_func(start);
@@ -98,7 +98,7 @@ public:
     do_job(int jobs_num) {
         auto start = start_func(__func__, jobs_num);
         std::cout << "Warning: this could take some time" << std::endl;
-        auto tp = ThreadPool();
+        ThreadPool tp;
         for (int i = 0; i < jobs_num; i++) {
             tp.push([&] () { 
                 int max = ThreadPoolTest::random(1, 100000);
@@ -116,8 +116,8 @@ public:
     void
     multithreading_access() {
         auto start = start_func(__func__, "noargs");
-        auto tp = ThreadPool();
-        auto acc_thread = std::vector<std::thread>(3);
+        ThreadPool tp;
+        std::vector<std::thread> acc_thread(3);
         for (int i = 0; i < 10; i++) {
             acc_thread[0] = std::thread([&tp] () {
                 tp.resize(ThreadPoolTest::random(1, 100));  
@@ -139,7 +139,7 @@ public:
     void
     multithreading_access_push() {
         auto start = start_func(__func__, "noargs");
-        auto tp = ThreadPool();
+        ThreadPool tp;
         auto acc_thread = std::vector<std::thread>(3);
         for (int i = 0; i < 2000; i++) {
             acc_thread[0] = std::thread([&tp] () {
@@ -162,7 +162,7 @@ public:
     void
     dg() {
         auto start = start_func(__func__, "noargs");
-        auto tp = ThreadPool();
+        ThreadPool tp;
         tp.dg_open("group1");
         for (int i = 0; i < 100; i++) {
             tp.dg_insert("group1", [i]() { auto a = i * 2; });
@@ -175,7 +175,7 @@ public:
     void
     dg_multith() {
         auto start = start_func(__func__, "noargs");
-        auto tp = ThreadPool();
+        ThreadPool tp;
         auto acc_thread = std::vector<std::thread>(3);
         acc_thread[0] = std::thread([&tp] () {
             tp.dg_open("group1");

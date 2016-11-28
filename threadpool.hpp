@@ -65,6 +65,7 @@
 #define TP_ENABLE_SANITY_CHECKS 1
 #endif
 
+
 namespace astp 
 {    
     class ThreadPool
@@ -86,9 +87,9 @@ namespace astp
         class Semaphore
         {
         public:
-            Semaphore(int value = 1) : _value(value) {};
+            Semaphore(int value) : _value(value) {};
             Semaphore(const Semaphore &S) : _mutex(), _cv() {};
-            Semaphore& operator=(Semaphore S) { return *this; }
+            Semaphore& operator=(Semaphore S)  {return *this;}
             ~Semaphore() {};
     
             void
@@ -102,7 +103,7 @@ namespace astp
                     --_wake_ups;
                 }
             }
-    
+ 
             void 
             signal() {
                 std::unique_lock<std::mutex> lock(_mutex);
@@ -141,13 +142,15 @@ namespace astp
                 _closed(false),
                 _has_finished(false),
                 _jobs_done_counter(0),
-                _jobs_count_at_leave(0) {};
+                _jobs_count_at_leave(0), 
+                _sem_sync(Semaphore(1)) {};
             DispatchGroup(DispatchGroup&& DP) noexcept :
                 _id(DP.id()), 
                 _closed(DP.is_leave()),
                 _has_finished(DP.has_finished()),
                 _jobs_done_counter(0),
-                _jobs_count_at_leave(0) {};
+                _jobs_count_at_leave(0),
+                _sem_sync(Semaphore(1)) {};
             DispatchGroup& operator = (DispatchGroup&& DP) = default;
             DispatchGroup(const DispatchGroup& DP) = delete;
             DispatchGroup& operator = (const DispatchGroup& DP) = delete;
@@ -233,6 +236,62 @@ namespace astp
         };
 
         /**
+        *   Thread safe class that manage
+        *   the waiting of the pool threads
+        *   when the queue is empty.
+        */
+        class ThreadsBlocker
+        {
+        public:
+            ThreadsBlocker() : _sem_interface(Semaphore(1)) {};
+            ~ThreadsBlocker() {};
+
+            void
+            activate_barrier() {
+                _sem_interface.wait();
+                _barrier = true;
+                _sem_interface.signal();
+            }
+
+            void
+            deactivate_barrier() {
+                _sem_interface.wait();
+                _barrier = false;
+                _sem_interface.signal();
+            }
+
+            bool
+            thread_wait(Semaphore *rsem) {
+                _sem_interface.wait();
+                if (_barrier) { 
+                    _sem_interface.signal();
+                    return false;
+                }
+                _sems.push_back(rsem);
+                _sem_interface.signal();
+                return true;
+            }
+
+            void
+            unblock(bool also_activate_barrier = false) {
+                _sem_interface.wait();
+                if (also_activate_barrier) {
+                    _barrier = true;
+                }
+                for (auto &s : _sems) {
+                    s->signal();
+                }
+                _sems.clear();
+                _sem_interface.signal();
+            }
+
+        private:
+            std::vector<Semaphore*> _sems;
+            bool _barrier = false;
+            Semaphore _sem_interface;
+        };
+
+        /**
         *       _    ____ ___ 
         *      / \  |  _ \_ _|
         *     / _ \ | |_) | | 
@@ -253,12 +312,10 @@ namespace astp
             _thread_sleep_time_ns(1000),
             _run_pool_thread(true),
             _prev_threads(0),
-            _push_c(0) 
+            _push_c(0),
+            _sem_api(Semaphore(1)),
+            _sem_job_ins_container(Semaphore(1))
         {
-            _sem_api = Semaphore(0);
-            _sem_job_ins_container = Semaphore(0);
-            _sem_threads_state = Semaphore(0);
-            
             #if TP_ENABLE_DEFAULT_EXCEPTION_CALL
             _exception_action = [](std::exception_ptr e) {};
             #endif
@@ -277,7 +334,7 @@ namespace astp
         /**
         *   Copy constructor.
         */ 
-        ThreadPool(const ThreadPool &TP) noexcept(false) {};
+        ThreadPool(const ThreadPool &TP) = delete;
         
         /**
         *   Deleted assignment operators
@@ -293,7 +350,10 @@ namespace astp
             try {
                 if (_run_pool_thread) {
                     _run_pool_thread = false;
-                    for (auto &t : _pool) t.join();
+                    _threads_blocker.unblock(true);
+                    for (auto &t : _pool) {
+                        t.join();
+                    } 
                 }
             } catch (...) {}
         };
@@ -319,6 +379,7 @@ namespace astp
             } else {
                 for (auto i = 0; i < diff; ++i) _safe_thread_pop();
             }
+            _threads_blocker.unblock();
             _sem_api.signal();
         }
 
@@ -425,6 +486,7 @@ namespace astp
             if (_run_pool_thread) return;
             _run_pool_thread = true;
             resize(_prev_threads);
+            _threads_blocker.deactivate_barrier();
         }
 
         /**
@@ -438,12 +500,13 @@ namespace astp
             _sem_api.wait();
             _run_pool_thread = false;
             _prev_threads = 0;
+
+            _threads_blocker.unblock(true);
             
             while(_threads_count != 0) {
                 ++_prev_threads;
                 _safe_thread_pop();
             }
-            
             while(_thread_to_kill_c != 0) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));
             }
@@ -764,8 +827,6 @@ namespace astp
         *   Semaphore for class thread-safety. 
         */
         Semaphore _sem_api;
-
-        Semaphore _sem_threads_state;
         /**
         *   Optional semaphore for jobs lambda data
         *   protection in critical sections.
@@ -828,6 +889,14 @@ namespace astp
         */
         std::function<void(std::exception_ptr)> _exception_action; 
         std::mutex _mutex_exceptions;
+        /**
+        *   Manage the threads waiting.
+        */
+        ThreadsBlocker _threads_blocker;
+        /**
+        *   For speedup.
+        */
+        bool _queue_empty = true;
 
         /**
         *   String errors that are throw when user 
@@ -895,6 +964,7 @@ namespace astp
             ++_push_c;
             std::unique_lock<std::mutex> lock(_mutex_queue);
             _queue.push_back(std::move(t));
+            if (_queue_empty) _threads_blocker.unblock();
         }
 
         /**
@@ -906,6 +976,7 @@ namespace astp
         _unsafe_queue_push(F&& t) {
             ++_push_c;
             _queue.push_back(std::move(t));
+            if (_queue_empty) _threads_blocker.unblock();
         }
 
         /**
@@ -919,6 +990,7 @@ namespace astp
             ++_push_c;
             _queue.push_back(std::move(t));
             _unsafe_queue_push(args...);
+            if (_queue_empty) _threads_blocker.unblock();
         }
 
         /**
@@ -932,6 +1004,7 @@ namespace astp
             ++_push_c;
             std::unique_lock<std::mutex> lock(_mutex_queue);
             _queue.push_front(std::move(t));
+            if (_queue_empty) _threads_blocker.unblock();
         }
 
         /**
@@ -945,6 +1018,7 @@ namespace astp
         _unsafe_queue_push_front(F&& t) {
             ++_push_c;
             _queue.push_front(std::move(t));
+            if (_queue_empty) _threads_blocker.unblock();
         }
 
         /**
@@ -954,10 +1028,14 @@ namespace astp
         std::function<void()>
         _safe_queue_pop() {
             std::unique_lock<std::mutex> lock(_mutex_queue);
-            if (_queue.empty()) return std::function<void()>(); 
-            
+            if (_queue.empty()) {
+                _queue_empty = true;
+                return std::function<void()>();
+            } 
+
             auto t = _queue.front();
             _queue.pop_front();
+            _queue_empty = false; 
             return t;
         }
 
@@ -968,7 +1046,8 @@ namespace astp
         */
         void 
         _safe_thread_push() {
-            _pool.push_back(std::move(std::thread(&ThreadPool::_thread_loop_mth, this)));
+            std::unique_lock<std::mutex> lock(_mutex_pool);
+            _pool.push_back(std::thread(&ThreadPool::_thread_loop_mth, this));
             ++_threads_count;
         }
 
@@ -986,7 +1065,7 @@ namespace astp
             _threads_to_kill_id.push_back(_pool.back().get_id());
             _pool.back().detach();
             _pool.pop_back();
-            --_threads_count;
+            --_threads_count;  
         }
 
         /**
@@ -1013,14 +1092,14 @@ namespace astp
         */
         void 
         _thread_loop_mth() {
+            Semaphore sem(0);
             while(_run_pool_thread) {
                 if (_thread_to_kill_c != 0) {
                     if (_thread_is_to_kill(std::this_thread::get_id())) break;
                 }
                 auto funcf = _safe_queue_pop();
                 if (!funcf) {
-                    if (_thread_sleep_time_ns != 0) 
-                        std::this_thread::sleep_for(std::chrono::nanoseconds(_thread_sleep_time_ns));              
+                    if (_threads_blocker.thread_wait(&sem)) sem.wait();    
                     continue; 
                 }
                 try {
