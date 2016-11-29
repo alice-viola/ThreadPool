@@ -3,7 +3,48 @@ compiler:
   - g++
 install:
   - sudo apt-get update
-  - sudo apt-get install libcppunit-dev libcppunit-1.12-1
+  - sudo apt-get install libcppunit-dev libcppunit-1.13-0
   - ./build.sh
 script:
   - ./build/ThreadPoolTest
+
+# Ubuntu 14.04 Trusty support
+sudo: required
+dist: trusty
+
+matrix:
+  include:
+    - compiler: gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-4.9
+      env: COMPILER=g++-4.9
+    - compiler: gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-5
+      env: COMPILER=g++-5
+    - compiler: clang
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.6
+          packages:
+            - clang-3.6
+      env: COMPILER=clang++-3.6
+    - compiler: clang
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.7
+          packages:
+            - clang-3.7
+      env: COMPILER=clang++-3.7
