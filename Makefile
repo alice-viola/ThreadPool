@@ -14,7 +14,7 @@ ThreadPool: $(OBJ)
 	$(CC) $(OPT)  -o $@ $^ $(CFLAGS) $(INCLUDE) $(LIBS_PATH) $(LIBS)
 
 ThreadPoolTest: $(OBJ)
-	$(CC) $(OPT) $(OPTL) -o $@ $^ $(CFLAGS) $(INCLUDE) $(LIBS_PATH) $(LIBS)
+	g++ -std=c++0x $(OPT) $(OPTL) -o $@ $^ $(CFLAGS) $(INCLUDE) $(LIBS_PATH) $(LIBS)
 
 .PHONY: clean
 
