@@ -135,8 +135,8 @@ namespace astp
         private:
             int _value;
             int _wake_ups = 0;
-            std::condition_variable _cv;
             std::mutex _mutex;
+            std::condition_variable _cv;
         };
 
         /**
@@ -234,8 +234,8 @@ namespace astp
             std::vector<std::function<void()> > _jobs;
             std::atomic<bool> _closed;
             std::atomic<bool> _has_finished;
-            std::atomic<int> _jobs_count_at_leave;
             std::atomic<int> _jobs_done_counter;
+            std::atomic<int> _jobs_count_at_leave;
             Semaphore _sem_sync;
 
             void
@@ -326,14 +326,14 @@ namespace astp
         */
         ThreadPool(int max_threads = std::thread::hardware_concurrency()) 
         noexcept(false) : 
-            _threads_count(0),
-            _thread_to_kill_c(),
+            _sem_api(Semaphore(1)),
+            _sem_job_ins_container(Semaphore(1)),
             _thread_sleep_time_ns(1000),
             _run_pool_thread(true),
-            _prev_threads(0),
+            _threads_count(0),
+            _thread_to_kill_c(0),
             _push_c(0),
-            _sem_api(Semaphore(1)),
-            _sem_job_ins_container(Semaphore(1))
+            _prev_threads(0)
         {
             #if TP_ENABLE_DEFAULT_EXCEPTION_CALL
             _exception_action = [](std::exception_ptr e) {};
@@ -635,7 +635,7 @@ namespace astp
                     return;
                 #endif
             }   
-            _groups.insert(std::make_pair(id, std::move(DispatchGroup(id))));
+            _groups.insert(std::make_pair(id, DispatchGroup(id)));
         }
 
         /**
@@ -676,7 +676,7 @@ namespace astp
                     return;
                 #endif
             }   
-            _groups.insert(std::make_pair(id, std::move(DispatchGroup(id))));
+            _groups.insert(std::make_pair(id, DispatchGroup(id)));
             it = _groups.find(id);
             it->second.insert(f);
             it->second.leave();
@@ -741,7 +741,7 @@ namespace astp
                     return;
                 #endif
             }   
-            while(!it->second.has_finished()) std::chrono::nanoseconds(_thread_sleep_time_ns); 
+            while(!it->second.has_finished()) std::chrono::nanoseconds(0); 
             _groups.erase(it);
         }
 

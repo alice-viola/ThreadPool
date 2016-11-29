@@ -3,7 +3,7 @@
 
 int 
 main() {
-    //test_threadpool();
+    test_threadpool();
 
     return 0;
 }

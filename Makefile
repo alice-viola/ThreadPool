@@ -1,4 +1,4 @@
-CC=g++ -std=c++11
+CC=g++ -std=c++11 -Wall
 OPT=-O3
 OPTL= -pthread
 DEPS=threadpool.hpp test.hpp
@@ -6,7 +6,7 @@ OBJ=main.o
 INCLUDE=-I/usr/local/include/
 LIBS_PATH=-L/usr/local/lib/
 LIBS= -lcppunit-1.14.0
-CPP_UNIT=`pkg-config --libs cppunit
+CPP_UNIT=`pkg-config --libs cppunit`
 
 %.o: %.cpp $(DEPS)
 	$(CC) $(OPT)  -c -o $@ $< $(CFLAGS) $(INCLUDE)
