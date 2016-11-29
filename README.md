@@ -1,4 +1,7 @@
-#ThreadPool
+## Status
+[![Build Status](https://travis-ci.org/adda25/ThreadPool.svg?branch=develop)](https://travis-ci.org/adda25/ThreadPool)
+
+# ThreadPool
 
 A thread safe pool using C++11 features.
 Developed with three main functionalities in mind: 
