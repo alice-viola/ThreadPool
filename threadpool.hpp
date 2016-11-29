@@ -46,6 +46,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <algorithm>
 #include <vector>
 #include <map>
 #include <string>
@@ -548,17 +549,17 @@ namespace astp
         *   Returning the current size of the 
         *   thread pool.
         */
-        constexpr int 
+        int 
         pool_size() const { 
             return _threads_count; 
         }
 
-        constexpr size_t
+        size_t
         queue_size() const {
             return _push_c;
         }
 
-        constexpr bool 
+        bool 
         queue_is_empty() const {
             return _push_c == 0;
         }
@@ -603,7 +604,7 @@ namespace astp
             _thread_sleep_time_ns = static_cast<int>(time_s * 1000000000);
         }
 
-        constexpr int 
+        int 
         sleep_time_ns() const {
             return _thread_sleep_time_ns;
         }
