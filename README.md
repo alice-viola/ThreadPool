@@ -36,6 +36,7 @@ Developed with three main functionalities in mind:
 * Thread safe 
 * Single header [threadpool.hpp]
 * When there aren't tasks to do, ThreadPool consumes the 0% of CPU
+* Tested with CPPUnit
 * MIT license
 
 The ThreadPool is tested under macOS Sierra 10.12 (Apple LLVM version 7.2.0 (clang-702.0.25)), 
