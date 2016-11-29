@@ -233,7 +233,7 @@ public:
         }
     }
 
-    void
+    /*void
     testSetExcHandl() {
         std::string err;
         std::string oerr = "ERR1";
@@ -248,7 +248,7 @@ public:
         } catch (std::string e) {
             CPPUNIT_ASSERT( e == oerr ); 
         }
-    }
+    }*/
 
 
 private:
@@ -272,7 +272,7 @@ private:
     CPPUNIT_TEST(testDispatchGroupWaitAndFire);
     CPPUNIT_TEST(testDispatchGroupNow);
     CPPUNIT_TEST(testDispatchGroupCloseBarrier);
-    CPPUNIT_TEST(testSetExcHandl);
+    //CPPUNIT_TEST(testSetExcHandl);
     CPPUNIT_TEST_SUITE_END();
 
     ThreadPool *tp;
