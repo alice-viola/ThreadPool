@@ -1,5 +1,6 @@
 CC=g++ -std=c++11
 OPT=-O3
+OPTL= -pthread
 DEPS=threadpool.hpp test.hpp
 OBJ=main.o 
 INCLUDE=-I/usr/local/include/
@@ -13,7 +14,7 @@ ThreadPool: $(OBJ)
 	$(CC) $(OPT)  -o $@ $^ $(CFLAGS) $(INCLUDE) $(LIBS_PATH) $(LIBS)
 
 ThreadPoolTest: $(OBJ)
-	$(CC) $(OPT)  -o $@ $^ $(CFLAGS) $(INCLUDE) $(LIBS_PATH) $(LIBS)
+	$(CC) $(OPT) $(OPTL) -o $@ $^ $(CFLAGS) $(INCLUDE) $(LIBS_PATH) $(LIBS)
 
 .PHONY: clean
 
