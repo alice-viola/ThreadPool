@@ -20,7 +20,7 @@ install:
   - ulimit -a -S
   - ulimit -a -H
   - cat /proc/sys/kernel/core_pattern
-  - sudo apt-get install libcppunit-dev libcppunit-1.13-0
+  - sudo apt-get install libcppunit-dev libcppunit-1.13-0 gdb
   - ./build.sh
 
 before_script:
