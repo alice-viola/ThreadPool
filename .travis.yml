@@ -1,0 +1,9 @@
+language: cpp
+compiler:
+  - clang
+install:
+  - sudo apt-get update
+  - sudo apt-get install libcppunit-dev libcppunit-1.12-1
+  - ./build.sh
+script:
+  - ./build/runtest

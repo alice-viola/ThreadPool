@@ -23,7 +23,7 @@ public:
     void 
     setUp() {
         srand(time(NULL));
-        tp = new ThreadPool();
+        tp = new ThreadPool(4);
     }
     
     void 
