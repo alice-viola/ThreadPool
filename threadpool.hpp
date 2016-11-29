@@ -68,6 +68,23 @@
 
 namespace astp 
 {    
+    /**
+    *   Structure of the class:
+    *
+    *   private:
+    *       - Nested Semaphore class
+    *       - Nested DispatchGroup class
+    *       - Nested ThreadsBlocker class
+    *
+    *   public:
+    *       - API
+    *
+    *   private:
+    *       - All the class variables and
+    *         methods
+    *   
+    *   Enjoy!
+    */
     class ThreadPool
     {
     private:
@@ -306,7 +323,8 @@ namespace astp
         *   of threads supported by the architecture.
         *   At least one thread is created.
         */
-        ThreadPool(int max_threads = std::thread::hardware_concurrency()) noexcept(false) : 
+        ThreadPool(int max_threads = std::thread::hardware_concurrency()) 
+        noexcept(false) : 
             _threads_count(0),
             _thread_to_kill_c(),
             _thread_sleep_time_ns(1000),

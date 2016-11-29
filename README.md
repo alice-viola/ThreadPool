@@ -35,7 +35,7 @@ Developed with three main functionalities in mind:
 * Synchronizations methods
 * Thread safe 
 * Single header [threadpool.hpp]
-* When there aren't taks to do, ThreadPool consumes the 0% of CPU
+* When there aren't tasks to do, ThreadPool consumes the 0% of CPU
 * MIT license
 
 The ThreadPool is tested under macOS Sierra 10.12 (Apple LLVM version 7.2.0 (clang-702.0.25)), 
@@ -96,9 +96,9 @@ the pool, but only when the threads have finished to compute their workload.
 At least one thread is must be kept in the pool.
 During the resizing, the stop of the pool is blocked.
 ```C++
-// For instace, current pool size is 64.
+// For instance, current pool size is 64.
 tp.resize(31) // -> Pop  (64 - 31) = 33 threads
-// For instace, current pool size is 64.
+// For instance, current pool size is 64.
 tp.resize(74) // -> Push (74 - 64) = 10 threads
 tp.resize(0)  // -> Throw an error
 tp.resize(-1) // -> Throw an error
@@ -178,7 +178,7 @@ inserted in the front of the queue [That is actually a std::deque].
 Furthermore, the mutex that controls the queue access is acquired only once,
 than all tasks are inserted in the queue; this saves the lock/unlock time.
 ```C++
-auto vec = std::vector<int>(600);
+std::vector<int> vec(600);
 int i = 0;
 tp.apply_for(600, [&vec, &i]() {
     vec[i] = doStuff();
@@ -192,16 +192,16 @@ of the classical push.
 
 There is also the async version, that acts like the normal push.
 ```C++
-auto vec = std::vector<int>(600);
+std::vector<int> vec(600);
 int i = 0;
 tp.apply_for_async(600, [&vec, &i]() {
     vec[i] = doStuff();
     i++;
 });
 // Returns immediately
-
-These functions throws an error if the iteration counts is less than zero.
 ```
+These functions throws an error if the iteration counts is less than zero.
+
 
 ### Future from push
 For task insertion, you may like to get a future reference to the pushed 
@@ -228,19 +228,25 @@ to the pool queue. Than you can wait until they are computed.
 ```C++
 // Create a group named "group_id"
 tp.dg_open("group_id");
+
 // Insert tasks in the group.
 tp.dg_insert("group_id", []() { /* task1 */ });
 tp.dg_insert("group_id", []() { /* task2 */ });
+
 // Signal the end of task insertion.
 tp.dg_close("group_id");  
+
 // Signal the end of task insertion and add a barrier.
-tp.dg_close_with_barrier("group_id", [](){});  
+tp.dg_close_with_barrier("group_id", [](){}); 
+
 // Wait the end of execution [if needed]
 tp.dg_wait("group_id");
+
 // Wait the end of execution [if needed], 
 // and fire a callback when all tasks in the group were ran.
 // Can throw.
 tp.dg_wait("group_id", []() { /* Fired when the group has been entirely computed */ });
+
 // Synchronize access to external container
 tp.dg_synchronize("group_id");
 tp.dg_end_synchronize("group_id");
@@ -254,8 +260,8 @@ tp.dg_now("group_id", []() { std::cout << "High priority" << std::endl; });
 This is useful when you have a lot of tasks in the pool queue and you want
 to process something without waiting the end of all others tasks. 
 
-All these methods throws if try to do illegal operations, like close a group that
-don't exist.
+All these methods throws if you try to do illegal operations, like close a group that
+doesn't exist.
 
 ### Synchronization
 Thread pool has four methods that allow the synchronization of the threads in the pool
@@ -321,7 +327,7 @@ auto current_queue_size = tp.queue_size();
 auto is_empty = tp.queue_is_empty();
 ```
 ### Excpetion handling 
-You can set a callback the will be callled every time
+You can set a callback that will be callled every time
 one of pool threads fire an excpetion:
 
 ```C++
