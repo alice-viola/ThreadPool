@@ -12,7 +12,9 @@
 #include <cppunit/ui/text/TestRunner.h>
 #include <cppunit/extensions/HelperMacros.h>
 
+#ifndef _THREAD_POOL_HPP_
 #include "threadpool.hpp"
+#endif
 
 using namespace astp;
 
@@ -242,11 +244,11 @@ public:
         };
         tp->set_excpetion_action(efunc);
         try {
-            *tp << [oerr](){ throw oerr; };
+            *tp << [oerr](){ throw std::runtime_error(oerr); };
             tp->wait();
             CPPUNIT_ASSERT( true ); 
-        } catch (std::string e) {
-            CPPUNIT_ASSERT( e == oerr ); 
+        } catch (std::runtime_error e) {
+            CPPUNIT_ASSERT( e.what() == oerr ); 
         }
     }*/
 

@@ -7,7 +7,7 @@
 *             |_| |_| |_|_|  \___|\__,_|\__,_|_|   \___/ \___/|_|                    *
 *                                                                                    *
 *                   BECAUSE POWER IS NOTHING WITHOUT CONTROL                         *
-*             You should not inheritance from any of these classes:                  *
+*             You should not inherit from any of these classes:                      *
 *                       no virtual destructors provided.                             *
 *                                                                                    *
 *                                                                                    *
@@ -69,6 +69,11 @@
 
 namespace astp 
 {    
+    int
+    hwc() {
+        return std::thread::hardware_concurrency();
+    }
+
     /**
     *   Structure of the class:
     *
@@ -107,7 +112,7 @@ namespace astp
         public:
             Semaphore(int value) : _value(value) {};
             Semaphore(const Semaphore &S) : _mutex(), _cv() {};
-            Semaphore& operator=(Semaphore S)  {return *this;}
+            Semaphore& operator=(Semaphore S) {return *this;}
             ~Semaphore() {};
     
             void
@@ -741,7 +746,9 @@ namespace astp
                     return;
                 #endif
             }   
-            while(!it->second.has_finished()) std::chrono::nanoseconds(0); 
+            while(!it->second.has_finished()) {
+                std::chrono::nanoseconds(0); 
+            }
             _groups.erase(it);
         }
 
@@ -1139,4 +1146,27 @@ namespace astp
 #endif /* __cplusplus */
 
 #endif /* _THREAD_POOL_HPP_ */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
