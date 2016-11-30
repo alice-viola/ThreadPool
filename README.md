@@ -94,7 +94,7 @@ astp::ThreadPool tp(-1); // -> Throw an error
 The pool can be resized after it was created: if the resizing operation decreases
 the current number of threads, a number equal to the difference is popped from 
 the pool, but only when the threads have finished to compute their workload.
-At least one thread is must be kept in the pool.
+At least one thread must be kept in the pool.
 During the resizing, the stop of the pool is blocked.
 ```C++
 // For instance, current pool size is 64.
@@ -214,7 +214,7 @@ auto future_value = tp.future_from_push([]() -> std::string {
 });
 future_value.wait();
 auto value = future_value.get();
-std::cout << value << std::endl // --> Hello world!
+std::cout << value << std::endl; // --> Hello world!
 ```
 
 ### Dispatch Groups
