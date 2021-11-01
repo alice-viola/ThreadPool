@@ -43,11 +43,18 @@ Developed with three main functionalities in mind:
 * MIT license
 
 The ThreadPool is tested under macOS Sierra 10.12 (Apple LLVM version 7.2.0 (clang-702.0.25)), 
+macOS Big Sur 11.5.2 (Apple clang version 12.0.5 (clang-1205.0.22.11)),
 LinuxMint 17.1 Rebecca (g++ 4.8.2), Apple iOS 9.3 (XCode 8.0, LLVM version 8.0). 
 
+## Usage
+
+To use ThreadPool, simply include the *threadpool.hpp* file
+in your projects.
+
 ## Compile
+
 You can run some example called in the provided main.cpp file
-with the following bash lines:
+with the following bash lines (CPPUnit required):
 
 for macOS (and OSX as well):
 ```bash
@@ -61,8 +68,15 @@ g++ -std=c++11 -O3 -pthread main.cpp
 
 The -O3 optimization parameter is obviously optional.
 
-Otherwise, simply include the *threadpool.hpp* file
-in your projects.
+To run an example (without the needs of CPPUnit):
+
+```bash
+# MacOS
+g++ -std=c++11 -O3 example.cpp
+
+# Linux
+g++ -std=c++11 -O3 -pthread example.cpp
+```
 
 ## First contact
 ```C++
@@ -87,18 +101,21 @@ int main() {
 ### Initialization
 You can create the thread pool with the default platform dependent number of threads, or
 you can specify your desired number: at least one thread must be created.
+
 ```C++
 astp::ThreadPool tp;     // -> Create default pool
 astp::ThreadPool tp(64); // -> Create 64 threads
 astp::ThreadPool tp(0);  // -> Throw an error
 astp::ThreadPool tp(-1); // -> Throw an error
 ```
+
 ### Resize
 The pool can be resized after it was created: if the resizing operation decreases
 the current number of threads, a number equal to the difference is popped from 
 the pool, but only when the threads have finished to compute their workload.
 At least one thread must be kept in the pool.
 During the resizing, the stop of the pool is blocked.
+
 ```C++
 // For instance, current pool size is 64.
 tp.resize(31) // -> Pop  (64 - 31) = 33 threads
@@ -111,6 +128,7 @@ tp.resize(-1) // -> Throw an error
 ### Insertion of tasks
 There are three basic syntax for task insertion in the pool, all of them
 uses lambda expression. The task inserted are appended at the end of a queue.
+
 ```C++
 // Classic syntax
 tp.push([ /* Lambda capturing */ ] () { /* Task */ });

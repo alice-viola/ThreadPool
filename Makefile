@@ -4,7 +4,7 @@ OPTL= -pthread
 DEPS=threadpool.hpp test.hpp
 OBJ=main.o 
 INCLUDE=-I/usr/local/include/
-LIBS_PATH=-L/usr/local/lib/
+LIBS_PATH=-L/usr/local/lib/ -L/opt/homebrew/Cellar
 LIBS= -lcppunit-1.14.0
 CPP_UNIT=`pkg-config --libs cppunit`
 
