@@ -189,6 +189,9 @@ namespace astp
 
             template<class T> void 
             leave(T&& t)  {
+                // An empty group gets a no-op job, so its end action
+                // still runs, on a pool thread like for any other group.
+                if (_jobs.empty()) insert([](){});
                 leave();
                 _end_action = t;
             }

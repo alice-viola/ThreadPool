@@ -235,6 +235,19 @@ public:
         }
     }
 
+    void
+    testDispatchGroupCloseBarrierEmpty() {
+        try {
+            int a = 0;
+            tp->dg_open("t1");
+            tp->dg_close_with_barrier("t1", [&a](){ a = 30; });
+            tp->dg_wait("t1");
+            CPPUNIT_ASSERT( a == 30);
+        } catch (const std::runtime_error&) {
+            CPPUNIT_ASSERT( false );
+        }
+    }
+
     /*void
     testSetExcHandl() {
         std::string err;
@@ -274,6 +287,7 @@ private:
     CPPUNIT_TEST(testDispatchGroupWaitAndFire);
     CPPUNIT_TEST(testDispatchGroupNow);
     CPPUNIT_TEST(testDispatchGroupCloseBarrier);
+    CPPUNIT_TEST(testDispatchGroupCloseBarrierEmpty);
     //CPPUNIT_TEST(testSetExcHandl);
     CPPUNIT_TEST_SUITE_END();
 
