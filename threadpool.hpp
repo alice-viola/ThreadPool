@@ -174,7 +174,7 @@ namespace astp
                 _jobs_done_counter(0),
                 _jobs_count_at_leave(0),
                 _sem_sync(Semaphore(1)) {};
-            DispatchGroup& operator = (DispatchGroup&& DP) = default;
+            DispatchGroup& operator = (DispatchGroup&& DP) = delete;
             DispatchGroup(const DispatchGroup& DP) = delete;
             DispatchGroup& operator = (const DispatchGroup& DP) = delete;
 
