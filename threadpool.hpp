@@ -245,15 +245,21 @@ namespace astp
 
             void
             _signal_end_of_job() { 
-                _jobs_done_counter++; 
-                _check_end_condition();
+                // Read the total before counting this job: right after the
+                // increment the group can finish and dg_wait() can erase it.
+                // Only the last job checks the end condition, so the end
+                // action runs once.
+                const int total = _jobs_count_at_leave;
+                if (++_jobs_done_counter == total) _check_end_condition();
             }
 
             void
             _check_end_condition() {
                 if (_jobs_done_counter == _jobs_count_at_leave && _closed) {
-                    _has_finished = true;
+                    // Set the flag last: dg_wait() erases the group
+                    // as soon as it sees it.
                     if (_end_action) _end_action();
+                    _has_finished = true;
                 }
             }
         };
